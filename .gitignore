@@ -1,0 +1,15 @@
+# 本機資料庫與上傳檔案（不要上傳到 GitHub）
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store

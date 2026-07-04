@@ -1,0 +1,222 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6d5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>復健紀錄手冊</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦵</text></svg>">
+
+<!-- ===================== 頁首 ===================== -->
+<header class="app-header">
+  <div class="app-header__bar">
+    <div class="app-header__title">復健紀錄手冊</div>
+    <div class="app-header__sub">每天一點點，慢慢會更好</div>
+    <div class="app-header__name" id="headerName"></div>
+  </div>
+  <div class="app-header__accent"></div>
+</header>
+
+<main id="main">
+
+  <!-- ===================== 今日 ===================== -->
+  <section class="view" data-view="today">
+    <div class="date-picker">
+      <button class="date-picker__nav" id="todayPrev" aria-label="前一天">‹</button>
+      <input type="date" id="todayDate" class="date-picker__input">
+      <button class="date-picker__nav" id="todayNext" aria-label="後一天">›</button>
+      <button class="date-picker__now" id="todayNow">今天</button>
+    </div>
+
+    <div class="cheer" id="cheer">今天有做，就是勝利。</div>
+
+    <div class="goals" id="goals"><!-- 進度卡由 JS 產生 --></div>
+
+    <div class="quick-actions">
+      <button class="qbtn qbtn--green" data-add="rehab">＋ 復健紀錄</button>
+      <button class="qbtn qbtn--orange" data-add="vitals">＋ 血壓血糖</button>
+    </div>
+
+    <h2 class="section-title">今日紀錄</h2>
+    <div id="todayTimeline" class="timeline"></div>
+  </section>
+
+  <!-- ===================== 復健 ===================== -->
+  <section class="view" data-view="rehab" hidden>
+    <div class="view-head">
+      <h2 class="section-title">復健紀錄</h2>
+      <button class="qbtn qbtn--green qbtn--sm" data-add="rehab">＋ 新增</button>
+    </div>
+    <div id="rehabList" class="record-groups"></div>
+  </section>
+
+  <!-- ===================== 血壓血糖 ===================== -->
+  <section class="view" data-view="vitals" hidden>
+    <div class="view-head">
+      <h2 class="section-title">血壓血糖</h2>
+      <button class="qbtn qbtn--orange qbtn--sm" data-add="vitals">＋ 新增</button>
+    </div>
+    <div id="vitalsList" class="record-groups"></div>
+  </section>
+
+  <!-- ===================== 圖表 ===================== -->
+  <section class="view" data-view="charts" hidden>
+    <h2 class="section-title">進步圖表</h2>
+    <div class="range-tabs" id="rangeTabs">
+      <button data-range="7" class="is-active">近 7 天</button>
+      <button data-range="30">近 30 天</button>
+      <button data-range="0">全部</button>
+    </div>
+    <div id="chartsWrap"></div>
+  </section>
+
+  <!-- ===================== 設定 ===================== -->
+  <section class="view" data-view="settings" hidden>
+    <h2 class="section-title">基本資料</h2>
+    <div class="card">
+      <label class="field">
+        <span>姓名</span>
+        <input type="text" id="pName" placeholder="例：張劉柱">
+      </label>
+      <label class="field">
+        <span>開始日期</span>
+        <input type="date" id="pStart">
+      </label>
+    </div>
+
+    <h2 class="section-title">每日目標 <small>（請醫師或家人幫忙填寫）</small></h2>
+    <div class="card">
+      <div class="goal-row">
+        <span class="goal-row__label">抬腿</span>
+        <span>每次</span><input type="number" min="0" id="gLegReps" class="mini"><span>下，</span>
+        <span>一天</span><input type="number" min="0" id="gLegTimes" class="mini"><span>次</span>
+      </div>
+      <div class="goal-row">
+        <span class="goal-row__label">站立</span>
+        <span>每次</span><input type="number" min="0" id="gStandReps" class="mini"><span>下，</span>
+        <span>一天</span><input type="number" min="0" id="gStandTimes" class="mini"><span>次</span>
+      </div>
+      <div class="goal-row">
+        <span class="goal-row__label">行走</span>
+        <span>每天</span><input type="number" min="0" id="gWalkLaps" class="mini"><span>圈</span>
+      </div>
+      <button class="qbtn qbtn--green full" id="saveProfile">儲存基本資料與目標</button>
+      <div class="save-hint" id="profileSaved" hidden>✔ 已儲存</div>
+    </div>
+
+    <h2 class="section-title">備份與匯出</h2>
+    <div class="card">
+      <p class="muted">資料很重要，建議定期下載備份存到手機或電腦。</p>
+      <a class="linkbtn" href="/api/backup">⬇ 下載備份檔（JSON）</a>
+      <button class="linkbtn" id="restoreBtn">⬆ 從備份檔還原</button>
+      <input type="file" id="restoreFile" accept="application/json" hidden>
+      <div class="divider"></div>
+      <p class="muted">給醫師看的表格：</p>
+      <a class="linkbtn" href="/api/export/rehab.csv">📄 復健紀錄 CSV</a>
+      <a class="linkbtn" href="/api/export/vitals.csv">📄 血壓血糖 CSV</a>
+    </div>
+
+    <div class="card card--muted">
+      {% if auth_enabled %}<button class="linkbtn" id="logoutBtn">登出</button>{% endif %}
+      <p class="tiny">復健紀錄手冊 · 爸爸加油，全家陪你一起 💪</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===================== 底部分頁 ===================== -->
+<nav class="tabbar" id="tabbar">
+  <button data-tab="today" class="is-active"><span class="tabbar__icon">🏠</span><span>今日</span></button>
+  <button data-tab="rehab"><span class="tabbar__icon">🦵</span><span>復健</span></button>
+  <button data-tab="vitals"><span class="tabbar__icon">❤️</span><span>血壓血糖</span></button>
+  <button data-tab="charts"><span class="tabbar__icon">📈</span><span>圖表</span></button>
+  <button data-tab="settings"><span class="tabbar__icon">⚙️</span><span>設定</span></button>
+</nav>
+
+<!-- ===================== 復健表單 ===================== -->
+<div class="modal" id="rehabModal" hidden>
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__panel">
+    <div class="modal__head">
+      <span id="rehabModalTitle">新增復健紀錄</span>
+      <button class="modal__x" data-close aria-label="關閉">✕</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="rehabId">
+      <div class="grid2">
+        <label class="field"><span>日期</span><input type="date" id="rDate"></label>
+        <label class="field"><span>時間</span><input type="time" id="rTime"></label>
+      </div>
+      <div class="grid3">
+        <label class="field"><span>抬腿（次）</span><input type="number" min="0" inputmode="numeric" id="rLeg" placeholder="0"></label>
+        <label class="field"><span>站立（次）</span><input type="number" min="0" inputmode="numeric" id="rStand" placeholder="0"></label>
+        <label class="field"><span>行走（圈）</span><input type="number" min="0" step="0.5" inputmode="decimal" id="rWalk" placeholder="0"></label>
+      </div>
+      <label class="field"><span>備註 / 今天的感覺</span>
+        <textarea id="rNotes" rows="2" placeholder="例：走得比昨天穩"></textarea>
+      </label>
+
+      <div class="media-row">
+        <label class="mediabtn">📷 拍照 / 選照片
+          <input type="file" id="rPhoto" accept="image/*" hidden>
+        </label>
+        <button type="button" class="mediabtn" id="rVoiceBtn">🎤 錄語音</button>
+      </div>
+      <div id="rMediaPreview" class="media-preview"></div>
+    </div>
+    <div class="modal__foot">
+      <button class="btn-ghost" id="rehabDelete" hidden>刪除</button>
+      <div class="spacer"></div>
+      <button class="btn-ghost" data-close>取消</button>
+      <button class="btn-primary" id="rehabSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 血壓血糖表單 ===================== -->
+<div class="modal" id="vitalsModal" hidden>
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__panel">
+    <div class="modal__head">
+      <span id="vitalsModalTitle">新增血壓血糖</span>
+      <button class="modal__x" data-close aria-label="關閉">✕</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="vitalsId">
+      <div class="grid2">
+        <label class="field"><span>日期</span><input type="date" id="vDate"></label>
+        <label class="field"><span>時間</span><input type="time" id="vTime"></label>
+      </div>
+      <div class="grid3">
+        <label class="field"><span>收縮壓 高</span><input type="number" min="0" inputmode="numeric" id="vSys" placeholder="120"></label>
+        <label class="field"><span>舒張壓 低</span><input type="number" min="0" inputmode="numeric" id="vDia" placeholder="80"></label>
+        <label class="field"><span>脈搏</span><input type="number" min="0" inputmode="numeric" id="vPulse" placeholder="72"></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>血糖 mg/dL</span><input type="number" min="0" step="0.1" inputmode="decimal" id="vSugar" placeholder="100"></label>
+        <label class="field"><span>時機</span>
+          <select id="vContext">
+            <option value="">—</option>
+            <option>空腹</option>
+            <option>飯前</option>
+            <option>飯後</option>
+            <option>睡前</option>
+          </select>
+        </label>
+      </div>
+      <label class="field"><span>備註</span>
+        <textarea id="vNotes" rows="2" placeholder="例：頭有點暈"></textarea>
+      </label>
+    </div>
+    <div class="modal__foot">
+      <button class="btn-ghost" id="vitalsDelete" hidden>刪除</button>
+      <div class="spacer"></div>
+      <button class="btn-ghost" data-close>取消</button>
+      <button class="btn-primary" id="vitalsSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>

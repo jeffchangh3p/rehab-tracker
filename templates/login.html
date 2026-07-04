@@ -1,0 +1,21 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f6d5f">
+<title>復健紀錄手冊 · 登入</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--green)}
+  .login{background:#fff;border-radius:20px;padding:28px 24px;width:min(360px,90vw);box-shadow:0 10px 40px rgba(0,0,0,.2);text-align:center}
+  .login h1{font-size:1.3rem;color:var(--green-700);margin:.2rem 0}
+  .login p{color:var(--muted);font-size:.9rem;margin:.2rem 0 1.2rem}
+  .login input{margin-bottom:14px}
+  .login .err{color:var(--danger);font-size:.88rem;margin-bottom:10px}
+</style>
+<form class="login" method="post" action="{{ url_for('login') }}">
+  <div style="font-size:2.4rem">🦵</div>
+  <h1>復健紀錄手冊</h1>
+  <p>每天一點點，慢慢會更好</p>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <input type="password" name="password" placeholder="請輸入密碼" autofocus required>
+  <button class="btn-primary" style="width:100%" type="submit">進入</button>
+</form>
