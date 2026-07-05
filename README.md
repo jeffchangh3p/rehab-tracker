@@ -44,6 +44,26 @@ python3 -m venv .venv
 
 ---
 
+## 部署流程圖（目前實際架構）
+
+```mermaid
+flowchart LR
+    subgraph deploy["部署（只有改程式碼時發生）"]
+        A["本機 rehab-tracker/"] -- "git push" --> B["GitHub<br>recalljeffchang/rehab-tracker"]
+        B -- "讀取 render.yaml" --> C["Render 建置<br>免費方案・新加坡"]
+    end
+    subgraph run["每天使用（資料流）"]
+        P["家人手機"] -- "HTTPS + 密碼" --> S["rehab-tracker-jjxg.onrender.com<br>Flask・本身不存資料"]
+        S -- "DATABASE_URL" --> N[("Neon PostgreSQL<br>所有資料永久保存")]
+    end
+    C --> S
+```
+
+重點：**Render 免費服務的磁碟是暫時的、不存任何資料**；所有輸入（復健紀錄、血壓血糖、
+留言、課表、照片語音）都經由 `DATABASE_URL` 寫進 **Neon PostgreSQL**，休眠 / 重啟都不會遺失。
+環境變數只有四個：`DATABASE_URL`、`SECRET_KEY`、`APP_PASSWORD`、`PYTHON_VERSION`（沒有
+`DATA_DIR`、也沒有掛載 persistent disk —— 那是被免費方案取代前的舊設計）。
+
 ## 部署到 Render（免費方案 + Neon 免費資料庫）
 
 > 為什麼要 Neon？Render 免費 web 服務的磁碟是**暫時的**，服務休眠 / 重啟就會清空，
