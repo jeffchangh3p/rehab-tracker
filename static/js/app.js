@@ -19,7 +19,30 @@ const state = {
   modalItems: {},       // 復健表單勾選：{"1": 次數或 null}
   modalPeriod: "上午",  // 復健表單時段
   exInfoEx: null,       // 目前示範彈窗顯示的動作（語音朗讀用）
+  schedule: null,       // 課表設定 {enabled, plan:{weekday:[items]}}
+  editorDay: (new Date()).getDay(),  // 課表編輯中的星期（0=日）
+  schedAddPeriod: "上午",
 };
+
+const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+const PORD = { "上午": 0, "下午": 1, "晚上": 2 };
+function cmpSchedItem(a, b) {
+  const pa = PORD[a.period] ?? 3, pb = PORD[b.period] ?? 3;
+  if (pa !== pb) return pa - pb;
+  return (a.time || "").localeCompare(b.time || "");
+}
+function schedItemLabel(it) {
+  if (it.kind === "exercise") {
+    const e = EX_BY_N[String(it.ex)];
+    const nm = e ? e.name : "動作" + it.ex;
+    return nm + (it.count != null && it.count !== "" ? ` ×${fmtNum(it.count)}` : "");
+  }
+  return it.label || "（項目）";
+}
+function genId() {
+  if (window.crypto && crypto.randomUUID) return "i" + crypto.randomUUID();
+  return "i" + Date.now().toString(36) + Math.floor(Math.random() * 1e9).toString(36);
+}
 
 /* ----------------------------- 復健動作資料 --------------------------------------------
    1–9 來自「復健動作AB分解圖.pdf」；10–14 為家人提供的頭頸運動。gif 為 null 者僅顯示文字。 */
@@ -125,6 +148,10 @@ const API = {
   messages: () => api("GET", "/api/messages"),
   createMessage: (b) => api("POST", "/api/messages", b),
   deleteMessage: (id) => api("DELETE", `/api/messages/${id}`),
+  schedule: () => api("GET", "/api/schedule"),
+  saveSchedule: (b) => api("PUT", "/api/schedule", b),
+  scheduleLog: (date) => api("GET", `/api/schedule/log?date=${date}`),
+  scheduleCheck: (b) => api("POST", "/api/schedule/check", b),
   restore: (b) => api("POST", "/api/restore", b),
 };
 
@@ -203,15 +230,70 @@ async function renderToday() {
   $("#todayDate").value = state.today;
   $("#cheer").textContent = CHEERS[parseDate(state.today).getDate() % CHEERS.length];
 
-  let summary, rehab, vitals;
+  let summary, rehab, vitals, schedule;
   try {
-    [summary, rehab, vitals] = await Promise.all([
-      API.summary(state.today), API.rehab(state.today), API.vitals(state.today),
+    [summary, rehab, vitals, schedule] = await Promise.all([
+      API.summary(state.today), API.rehab(state.today), API.vitals(state.today), API.schedule(),
     ]);
   } catch (e) { toast(e.message); return; }
 
-  renderCompletion(summary);
+  state.schedule = schedule;
   renderTimeline(rehab, vitals);
+
+  const wd = String(parseDate(state.today).getDay());
+  const hasTodayPlan = schedule && schedule.enabled && (((schedule.plan || {})[wd] || []).length > 0);
+  if (hasTodayPlan) {
+    $("#goals").hidden = true;
+    await renderTodaySchedule();
+  } else {
+    // 未啟用課表、或這天沒排課表 → 顯示原本的 X/14 完成度
+    $("#goals").hidden = false;
+    $("#todaySchedule").innerHTML = "";
+    renderCompletion(summary);
+  }
+}
+
+/* 今日課表：依當天星期顯示，可打勾 */
+async function renderTodaySchedule() {
+  const el = $("#todaySchedule");
+  const wd = parseDate(state.today).getDay();
+  const items = (((state.schedule || {}).plan || {})[String(wd)] || []).slice().sort(cmpSchedItem);
+  if (!items.length) {
+    el.innerHTML = `<div class="sched-card"><div class="sched-card__title">🗓 今日課表 <span class="sched-day">${WEEKDAYS[wd]}</span></div>
+      <div class="empty">這天還沒有安排，可到「設定 → 課表」新增。</div></div>`;
+    return;
+  }
+  let doneIds = [];
+  try { doneIds = await API.scheduleLog(state.today); } catch (_) {}
+  const done = new Set(doneIds);
+  const doneCount = items.filter((it) => done.has(it.id)).length;
+  const pct = Math.round((doneCount / items.length) * 100);
+  const rows = items.map((it) => {
+    const isDone = done.has(it.id);
+    const info = it.kind === "exercise" ? `<button type="button" class="ck-info" data-info="${esc(it.ex)}" aria-label="說明">ⓘ</button>` : "";
+    const time = it.time ? `<span class="sched-time">${esc(it.time)}</span>` : "";
+    return `<div class="sched-row${isDone ? " done" : ""}" data-sched="${esc(it.id)}">
+        <button type="button" class="ck-box" data-schedtoggle="${esc(it.id)}" aria-label="完成">✓</button>
+        <span class="sched-label" data-schedtoggle="${esc(it.id)}"><span class="rec-period">${esc(it.period)}</span>${time}${esc(schedItemLabel(it))}</span>${info}
+      </div>`;
+  }).join("");
+  el.innerHTML = `<div class="sched-card ${doneCount >= items.length ? "is-done" : ""}">
+      <div class="sched-card__top">
+        <div class="sched-card__title">🗓 今日課表 <span class="sched-day">${WEEKDAYS[wd]}</span></div>
+        <div class="goal-card__val"><b>${doneCount}</b><span class="goal"> / ${items.length}</span><span class="unit">項</span></div>
+      </div>
+      <div class="bar"><div class="bar__fill" style="width:${pct}%"></div></div>
+      <div class="sched-list">${rows}</div>
+    </div>`;
+}
+
+async function toggleSchedCheck(itemId) {
+  const row = $(`#todaySchedule .sched-row[data-sched="${itemId}"]`);
+  const nowDone = row && row.classList.contains("done");
+  try {
+    await API.scheduleCheck({ date: state.today, item_id: itemId, done: !nowDone });
+    renderTodaySchedule();
+  } catch (e) { toast(e.message); }
 }
 
 function renderCompletion(s) {
@@ -550,12 +632,123 @@ async function renderCharts() {
 
 /* ----------------------------- 設定 ----------------------------- */
 async function loadSettings() {
-  let p;
-  try { p = await API.profile(); } catch (e) { toast(e.message); return; }
+  let p, sc;
+  try { [p, sc] = await Promise.all([API.profile(), API.schedule()]); }
+  catch (e) { toast(e.message); return; }
   state.profile = p;
+  state.schedule = sc;
   $("#pName").value = p.name || "";
   $("#pStart").value = p.start_date || "";
   renderExerciseGuide();
+  populateSchedExerciseSelect();
+  schedTypeChange();
+  renderScheduleEditor();
+}
+
+/* ----------------------------- 課表編輯 ----------------------------- */
+function populateSchedExerciseSelect() {
+  const sel = $("#schedAddEx");
+  if (!sel || sel.dataset.ready) return;
+  let html = "";
+  for (const cat of Object.keys(EX_CATS)) {
+    const list = EXERCISES.filter((e) => e.cat === cat);
+    html += `<optgroup label="${esc(cat)}">` +
+      list.map((e) => `<option value="${e.n}">${e.n}. ${esc(e.name)}</option>`).join("") + `</optgroup>`;
+  }
+  sel.innerHTML = html;
+  sel.dataset.ready = "1";
+}
+
+function schedTypeChange() {
+  const isEx = $("#schedAddType").value === "exercise";
+  $("#schedAddExWrap").hidden = !isEx;
+  $("#schedAddCountWrap").hidden = !isEx;
+  $("#schedAddCustomWrap").hidden = isEx;
+}
+
+function ensureSchedule() {
+  if (!state.schedule) state.schedule = { enabled: false, plan: {} };
+  if (!state.schedule.plan) state.schedule.plan = {};
+  return state.schedule;
+}
+
+let schedSaveChain = Promise.resolve();
+function saveScheduleNow() {
+  const sc = ensureSchedule();
+  // 快照當下內容並串接，確保多次快速編輯依序寫入、不會被較舊的 PUT 蓋過。
+  const payload = { enabled: !!sc.enabled, plan: JSON.parse(JSON.stringify(sc.plan || {})) };
+  schedSaveChain = schedSaveChain
+    .then(() => API.saveSchedule(payload))
+    .catch((e) => toast(e.message));
+  return schedSaveChain;
+}
+
+function renderScheduleEditor() {
+  const sc = ensureSchedule();
+  $("#schedEnabled").checked = !!sc.enabled;
+  $("#schedDayName").textContent = WEEKDAYS[state.editorDay];
+  $$("#schedDay button").forEach((b) => b.classList.toggle("is-active", Number(b.dataset.wd) === state.editorDay));
+  const items = (sc.plan[String(state.editorDay)] || []).slice().sort(cmpSchedItem);
+  const el = $("#schedItems");
+  el.innerHTML = items.length
+    ? items.map((it) => `<div class="sched-edit-row">
+        <span class="rec-period">${esc(it.period)}</span>
+        ${it.time ? `<span class="sched-time">${esc(it.time)}</span>` : ""}
+        <span class="sched-edit-label">${esc(schedItemLabel(it))}</span>
+        <button type="button" class="sched-del" data-scheddel="${esc(it.id)}" aria-label="刪除">✕</button>
+      </div>`).join("")
+    : `<div class="empty" style="padding:14px 6px">這天還沒有項目，用下面新增。</div>`;
+}
+
+function schedAddItem() {
+  const sc = ensureSchedule();
+  const wd = String(state.editorDay);
+  if (!sc.plan[wd]) sc.plan[wd] = [];
+  const type = $("#schedAddType").value;
+  const item = { id: genId(), period: state.schedAddPeriod, time: $("#schedAddTime").value || "" };
+  if (type === "exercise") {
+    item.kind = "exercise";
+    item.ex = Number($("#schedAddEx").value);
+    const c = $("#schedAddCount").value;
+    item.count = c === "" ? null : Number(c);
+  } else {
+    const label = $("#schedAddCustom").value.trim();
+    if (!label) { toast("請輸入自訂內容"); return; }
+    item.kind = "custom";
+    item.label = label;
+  }
+  sc.plan[wd].push(item);
+  saveScheduleNow();
+  renderScheduleEditor();
+  $("#schedAddTime").value = ""; $("#schedAddCount").value = ""; $("#schedAddCustom").value = "";
+  toast("已加入");
+}
+
+function schedDelItem(id) {
+  const sc = ensureSchedule();
+  const wd = String(state.editorDay);
+  sc.plan[wd] = (sc.plan[wd] || []).filter((it) => it.id !== id);
+  saveScheduleNow();
+  renderScheduleEditor();
+}
+
+function schedToggleEnabled() {
+  ensureSchedule().enabled = $("#schedEnabled").checked;
+  saveScheduleNow();
+}
+
+function schedCopyToAll() {
+  const sc = ensureSchedule();
+  const src = sc.plan[String(state.editorDay)] || [];
+  if (!src.length) { toast("這天沒有項目可複製"); return; }
+  if (!confirm(`要把「${WEEKDAYS[state.editorDay]}」的課表複製到每一天嗎？（會覆蓋其他天）`)) return;
+  for (let d = 0; d < 7; d++) {
+    if (d === state.editorDay) continue;  // 來源這天不動，才不會弄丟今天的打勾
+    sc.plan[String(d)] = src.map((it) => ({ ...it, id: genId() }));
+  }
+  saveScheduleNow();
+  renderScheduleEditor();
+  toast("已複製到每一天");
 }
 
 async function saveProfile() {
@@ -1037,6 +1230,30 @@ function bindEvents() {
   $("#msgSend").addEventListener("click", submitMessage);
   const savedAuthor = localStorage.getItem("rehab_msg_author");
   if (savedAuthor) $("#msgAuthor").value = savedAuthor;
+
+  // 今日課表打勾
+  $("#todaySchedule").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-schedtoggle]");
+    if (t) toggleSchedCheck(t.dataset.schedtoggle);
+  });
+
+  // 課表編輯（設定頁）
+  $("#schedEnabled").addEventListener("change", schedToggleEnabled);
+  $("#schedDay").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-wd]");
+    if (b) { state.editorDay = Number(b.dataset.wd); renderScheduleEditor(); }
+  });
+  $("#schedAddPeriod").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-p]");
+    if (b) { state.schedAddPeriod = b.dataset.p; $$("#schedAddPeriod button").forEach((x) => x.classList.toggle("is-active", x === b)); }
+  });
+  $("#schedAddType").addEventListener("change", schedTypeChange);
+  $("#schedAddBtn").addEventListener("click", schedAddItem);
+  $("#schedItems").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-scheddel]");
+    if (b) schedDelItem(b.dataset.scheddel);
+  });
+  $("#schedCopyAll").addEventListener("click", schedCopyToAll);
 }
 
 async function main() {

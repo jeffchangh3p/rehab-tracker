@@ -328,3 +328,33 @@ textarea{resize:vertical}
 .msg__del{margin-left:auto;border:none;background:transparent;color:#ccc;font-size:.9rem;cursor:pointer;padding:2px 6px}
 .msg__del:active{color:var(--danger)}
 .msg__text{font-size:1.12rem;line-height:1.65;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+
+/* ---------------- 課表 ---------------- */
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  font-weight:700;color:var(--green-700);font-size:1.05rem}
+.switch-row input[type=checkbox]{width:auto!important;transform:scale(1.5);accent-color:var(--green);cursor:pointer;margin-right:4px}
+.seg--days button{padding:9px 2px;font-size:.98rem}
+.sched-daylabel{margin:16px 2px 6px;color:var(--muted);font-size:.9rem}
+.sched-daylabel b{color:var(--green-700)}
+.sched-items{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.sched-edit-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fbfdfc}
+.sched-edit-label{flex:1;min-width:0;font-size:.98rem}
+.sched-del{border:none;background:transparent;color:#ccc;font-size:.95rem;cursor:pointer;padding:2px 6px}
+.sched-del:active{color:var(--danger)}
+.sched-time{color:var(--muted);font-size:.82rem;font-variant-numeric:tabular-nums}
+.sched-add{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.sched-add__title{font-weight:700;color:var(--green-700);margin-bottom:8px;font-size:.95rem}
+
+/* 今日課表卡 */
+.sched-card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 16px;box-shadow:var(--shadow);margin-bottom:14px}
+.sched-card.is-done{border-color:var(--orange)}
+.sched-card__top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.sched-card__title{font-weight:700;color:var(--green-700);font-size:1.05rem}
+.sched-day{color:var(--muted);font-size:.85rem;font-weight:400;margin-left:2px}
+.sched-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.sched-row{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fbfdfc}
+.sched-row.done{background:var(--green-050);border-color:var(--green-100)}
+.sched-row.done .ck-box{background:var(--green);border-color:var(--green);color:#fff}
+.sched-row.done .sched-label{color:var(--muted);text-decoration:line-through}
+.sched-label{flex:1;min-width:0;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;gap:6px;flex-wrap:wrap}

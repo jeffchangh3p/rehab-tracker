@@ -121,8 +121,18 @@ def _schema_statements():
             text       TEXT DEFAULT '',
             created_at TEXT DEFAULT ''
         )""",
+        # 課表設定（key/value，schedule 存整份 JSON）
+        "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')",
+        # 課表每日打勾紀錄（某天完成了哪個課表項目）
+        f"""CREATE TABLE IF NOT EXISTS schedule_log (
+            {idcol},
+            date       TEXT NOT NULL,
+            item_id    TEXT NOT NULL,
+            created_at TEXT DEFAULT ''
+        )""",
         "CREATE INDEX IF NOT EXISTS idx_rehab_date  ON rehab(date)",
         "CREATE INDEX IF NOT EXISTS idx_vitals_date ON vitals(date)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_log_uniq ON schedule_log(date, item_id)",
     ]
 
 
@@ -243,6 +253,12 @@ def init_db():
                 )
             except Exception:  # noqa: BLE001  併發插入撞主鍵
                 pass
+        # 預建 schedule 設定列，避免第一次存課表時併發 INSERT 撞主鍵
+        try:
+            if not db.execute("SELECT 1 FROM settings WHERE key = 'schedule'").fetchone():
+                db.execute("INSERT INTO settings (key, value) VALUES ('schedule', '')")
+        except Exception:  # noqa: BLE001
+            pass
     finally:
         db.close()
 
@@ -613,6 +629,81 @@ def delete_message(mid):
 
 
 # ---------------------------------------------------------------------------
+# API：課表（每天的復健 / 自訂項目安排）
+# ---------------------------------------------------------------------------
+def _get_setting(key):
+    row = get_db().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else ""
+
+
+def _set_setting(key, value):
+    db = get_db()
+    # 先 UPDATE，沒有該列才 INSERT（schedule 列在 init_db 已預建，正常都走 UPDATE）
+    cur = db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+    if getattr(cur, "rowcount", 0) == 0:
+        db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+
+
+def _sched_log_insert(db, date, item_id, created_at):
+    """寫入課表打勾，重複 (date,item_id) 直接忽略（配合 UNIQUE 索引，避免重複列）。"""
+    if IS_PG:
+        db.execute("INSERT INTO schedule_log (date, item_id, created_at) VALUES (?, ?, ?) "
+                   "ON CONFLICT (date, item_id) DO NOTHING", (date, item_id, created_at))
+    else:
+        db.execute("INSERT OR IGNORE INTO schedule_log (date, item_id, created_at) VALUES (?, ?, ?)",
+                   (date, item_id, created_at))
+
+
+@app.route("/api/schedule", methods=["GET"])
+def get_schedule():
+    raw = _get_setting("schedule")
+    try:
+        data = json.loads(raw) if raw else {}
+    except (ValueError, TypeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return jsonify({"enabled": bool(data.get("enabled")),
+                    "plan": data.get("plan") if isinstance(data.get("plan"), dict) else {}})
+
+
+@app.route("/api/schedule", methods=["PUT"])
+def put_schedule():
+    d = request.get_json(force=True, silent=True) or {}
+    enabled = bool(d.get("enabled"))
+    plan = d.get("plan") if isinstance(d.get("plan"), dict) else {}
+    _set_setting("schedule", json.dumps({"enabled": enabled, "plan": plan}, ensure_ascii=False))
+    audit("SCHEDULE_UPDATE", "on" if enabled else "off")
+    get_db().commit()
+    return jsonify({"enabled": enabled, "plan": plan})
+
+
+@app.route("/api/schedule/log")
+def get_schedule_log():
+    date = request.args.get("date")
+    if not date:
+        return jsonify({"error": "date is required"}), 400
+    rows = get_db().execute("SELECT item_id FROM schedule_log WHERE date = ?", (date,)).fetchall()
+    return jsonify([r["item_id"] for r in rows])
+
+
+@app.route("/api/schedule/check", methods=["POST"])
+def check_schedule():
+    d = request.get_json(force=True, silent=True) or {}
+    date = as_str(d.get("date"))
+    item_id = as_str(d.get("item_id"))
+    if not date or not item_id:
+        return jsonify({"error": "date and item_id required"}), 400
+    db = get_db()
+    if bool(d.get("done")):
+        _sched_log_insert(db, date, item_id, now_iso())
+    else:
+        db.execute("DELETE FROM schedule_log WHERE date = ? AND item_id = ?", (date, item_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # API：今日彙總（目標達成進度）
 # ---------------------------------------------------------------------------
 @app.route("/api/summary")
@@ -652,6 +743,8 @@ def _backup_payload(db):
         "rehab": [rehab_out(r) for r in db.execute("SELECT * FROM rehab ORDER BY id").fetchall()],
         "vitals": [row_to_dict(r) for r in db.execute("SELECT * FROM vitals ORDER BY id").fetchall()],
         "messages": [row_to_dict(r) for r in db.execute("SELECT * FROM messages ORDER BY id").fetchall()],
+        "settings": [row_to_dict(r) for r in db.execute("SELECT * FROM settings ORDER BY key").fetchall()],
+        "schedule_log": [row_to_dict(r) for r in db.execute("SELECT * FROM schedule_log ORDER BY id").fetchall()],
         "audit_log": [row_to_dict(r) for r in db.execute("SELECT * FROM audit_log ORDER BY id").fetchall()],
     }
 
@@ -693,8 +786,15 @@ def restore():
     try:
         db.execute("DELETE FROM rehab")
         db.execute("DELETE FROM vitals")
-        db.execute("DELETE FROM messages")
         db.execute("DELETE FROM audit_log")
+        # 較新的資料表只在備份檔真的含有該區塊時才清空，
+        # 這樣還原「舊版備份」不會把留言 / 課表一起清掉。
+        if "messages" in d:
+            db.execute("DELETE FROM messages")
+        if "settings" in d:
+            db.execute("DELETE FROM settings")
+        if "schedule_log" in d:
+            db.execute("DELETE FROM schedule_log")
 
         prof = d.get("profile") or {}
         db.execute(
@@ -757,6 +857,14 @@ def restore():
                 "INSERT INTO messages (author, text, created_at) VALUES (?, ?, ?)",
                 (as_str(m.get("author")), as_str(m.get("text")), as_str(m.get("created_at")) or now_iso()),
             )
+        for s in d.get("settings", []) or []:
+            if as_str(s.get("key")):
+                db.execute("INSERT INTO settings (key, value) VALUES (?, ?)",
+                           (as_str(s.get("key")), as_str(s.get("value"))))
+        for sl in d.get("schedule_log", []) or []:
+            if as_str(sl.get("date")) and as_str(sl.get("item_id")):
+                _sched_log_insert(db, as_str(sl.get("date")), as_str(sl.get("item_id")),
+                                  as_str(sl.get("created_at")) or now_iso())
         # 還原操作紀錄，讓備份是完整的來回（backup 有匯出 audit_log 就該還原）。
         for a in d.get("audit_log", []) or []:
             db.execute(

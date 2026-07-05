@@ -30,6 +30,7 @@
 
     <div class="cheer" id="cheer">今天有做，就是勝利。</div>
 
+    <div id="todaySchedule"><!-- 今日課表（啟用時由 JS 產生）--></div>
     <div class="goals" id="goals"><!-- 進度卡由 JS 產生 --></div>
 
     <div class="quick-actions">
@@ -101,9 +102,61 @@
       <div class="save-hint" id="profileSaved" hidden>✔ 已儲存</div>
     </div>
 
+    <h2 class="section-title">課表 <small>安排每天要做的項目</small></h2>
+    <div class="card">
+      <label class="switch-row">
+        <span>啟用課表</span>
+        <input type="checkbox" id="schedEnabled">
+      </label>
+      <p class="muted">開啟後，「今日」頁會顯示當天課表，讓爸爸照著做、做完打勾。</p>
+
+      <div class="sched-daylabel">編輯：<b id="schedDayName">星期日</b></div>
+      <div class="seg seg--days" id="schedDay">
+        <button type="button" data-wd="0">日</button>
+        <button type="button" data-wd="1">一</button>
+        <button type="button" data-wd="2">二</button>
+        <button type="button" data-wd="3">三</button>
+        <button type="button" data-wd="4">四</button>
+        <button type="button" data-wd="5">五</button>
+        <button type="button" data-wd="6">六</button>
+      </div>
+
+      <div id="schedItems" class="sched-items"></div>
+
+      <div class="sched-add">
+        <div class="sched-add__title">新增項目到這天</div>
+        <div class="seg" id="schedAddPeriod">
+          <button type="button" data-p="上午" class="is-active">上午</button>
+          <button type="button" data-p="下午">下午</button>
+          <button type="button" data-p="晚上">晚上</button>
+        </div>
+        <div class="grid2">
+          <label class="field"><span>時間（可留白）</span><input type="time" id="schedAddTime"></label>
+          <label class="field"><span>類型</span>
+            <select id="schedAddType">
+              <option value="exercise">復健動作</option>
+              <option value="custom">自訂項目</option>
+            </select>
+          </label>
+        </div>
+        <label class="field" id="schedAddExWrap"><span>選擇動作</span>
+          <select id="schedAddEx"></select>
+        </label>
+        <label class="field" id="schedAddCountWrap"><span>次數（可留白）</span>
+          <input type="number" id="schedAddCount" min="0" inputmode="numeric">
+        </label>
+        <label class="field" id="schedAddCustomWrap" hidden><span>自訂內容</span>
+          <input type="text" id="schedAddCustom" placeholder="例：散步 15 分鐘、量血壓、吃藥" maxlength="60">
+        </label>
+        <button class="qbtn qbtn--green full" id="schedAddBtn">＋ 加入這天</button>
+      </div>
+
+      <button class="linkbtn" id="schedCopyAll">把「這天」的課表複製到每一天</button>
+    </div>
+
     <h2 class="section-title">復健動作說明</h2>
     <div class="card">
-      <p class="muted">共 11 個動作，點任一個看示範動畫與做法。</p>
+      <p class="muted">共 14 個動作，點任一個看示範動畫與做法。</p>
       <div id="exerciseGuide" class="ex-guide"></div>
     </div>
 
