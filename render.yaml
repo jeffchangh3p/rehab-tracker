@@ -1,29 +1,27 @@
 # Render 部署設定 (Render deployment blueprint)
 # 在 Render 建立 Blueprint 時會自動讀取這個檔案。
+#
+# 這是「免費方案」版本：
+#   - Render 免費 web 服務的磁碟是「暫時的」，重啟就清空，所以「不能」把資料庫放在上面。
+#   - 因此資料改放在免費的 Neon PostgreSQL（永久保存），透過 DATABASE_URL 連線。
+#   - 免費 web 服務閒置 15 分鐘會休眠，下次開啟需約 1 分鐘喚醒（資料不會遺失，存在 Neon）。
 services:
   - type: web
     name: rehab-tracker
     runtime: python
-    # 「starter」方案 ($7/月) 才支援 persistent disk，資料才不會在重啟時消失。
-    # 若用免費方案：把下方 disk 區塊整段刪掉，並改用「設定 → 備份」定期匯出保存。
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --workers 2 --timeout 120
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.4"
-      # 資料庫與上傳檔案都放在下面掛載的 disk 上
-      - key: DATA_DIR
-        value: /var/data
-      # 用來簽署登入 cookie；Render 會自動產生一組
+      # 登入 cookie 簽章用，Render 會自動產生一組
       - key: SECRET_KEY
         generateValue: true
-      # 選填：設定一組密碼保護整個網站（醫療資料建議設定）。
-      # 在 Render 後台 Environment 加上 APP_PASSWORD 即可啟用。
+      # Neon 資料庫連線字串：在 Render 後台 Environment 貼上（不要寫在這個公開檔案裡）
+      - key: DATABASE_URL
+        sync: false
+      # 選填：設定密碼保護整個網站（醫療資料建議設定）
       # - key: APP_PASSWORD
       #   sync: false
-    disk:
-      name: rehab-data
-      mountPath: /var/data
-      sizeGB: 1

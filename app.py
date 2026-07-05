@@ -29,6 +29,14 @@ DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "rehab.db")
 
+# 有 DATABASE_URL（在 Render 填入 Neon 的連線字串）就用 PostgreSQL，資料永久保存；
+# 沒有的話本機自動改用 SQLite，方便開發測試。
+DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
+IS_PG = DATABASE_URL.startswith("postgres")
+if IS_PG:
+    import psycopg
+    from psycopg.rows import dict_row
+
 # 若設定 APP_PASSWORD，整個網站需要輸入密碼才能使用（醫療資料建議開啟）。
 APP_PASSWORD = os.environ.get("APP_PASSWORD") or ""
 
@@ -57,67 +65,104 @@ BACKUP_VERSION = 1
 # ---------------------------------------------------------------------------
 # 資料庫
 # ---------------------------------------------------------------------------
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS profile (
-    id                    INTEGER PRIMARY KEY CHECK (id = 1),
-    name                  TEXT    DEFAULT '',
-    start_date            TEXT    DEFAULT '',
-    goal_leg_raise_reps   INTEGER DEFAULT 0,   -- 抬腿 每次 __ 下
-    goal_leg_raise_times  INTEGER DEFAULT 0,   -- 抬腿 一天 __ 次
-    goal_standing_reps    INTEGER DEFAULT 0,   -- 站立 每次 __ 下
-    goal_standing_times   INTEGER DEFAULT 0,   -- 站立 一天 __ 次
-    goal_walking_laps     INTEGER DEFAULT 0,   -- 行走 每天 __ 圈
-    updated_at            TEXT    DEFAULT ''
-);
+def _schema_statements():
+    # 自增主鍵語法：SQLite 與 PostgreSQL 不同
+    idcol = "id SERIAL PRIMARY KEY" if IS_PG else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+    return [
+        """CREATE TABLE IF NOT EXISTS profile (
+            id                    INTEGER PRIMARY KEY CHECK (id = 1),
+            name                  TEXT    DEFAULT '',
+            start_date            TEXT    DEFAULT '',
+            goal_leg_raise_reps   INTEGER DEFAULT 0,
+            goal_leg_raise_times  INTEGER DEFAULT 0,
+            goal_standing_reps    INTEGER DEFAULT 0,
+            goal_standing_times   INTEGER DEFAULT 0,
+            goal_walking_laps     INTEGER DEFAULT 0,
+            updated_at            TEXT    DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS rehab (
+            {idcol},
+            date       TEXT NOT NULL,
+            time       TEXT DEFAULT '',
+            leg_raise  INTEGER,
+            standing   INTEGER,
+            walking    REAL,
+            notes      TEXT DEFAULT '',
+            photo      TEXT,
+            voice      TEXT,
+            created_at TEXT DEFAULT '',
+            updated_at TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS vitals (
+            {idcol},
+            date          TEXT NOT NULL,
+            time          TEXT DEFAULT '',
+            systolic      INTEGER,
+            diastolic     INTEGER,
+            pulse         INTEGER,
+            blood_sugar   REAL,
+            sugar_context TEXT DEFAULT '',
+            notes         TEXT DEFAULT '',
+            created_at    TEXT DEFAULT '',
+            updated_at    TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS audit_log (
+            {idcol},
+            action     TEXT,
+            detail     TEXT,
+            created_at TEXT DEFAULT ''
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_rehab_date  ON rehab(date)",
+        "CREATE INDEX IF NOT EXISTS idx_vitals_date ON vitals(date)",
+    ]
 
-CREATE TABLE IF NOT EXISTS rehab (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    date       TEXT NOT NULL,          -- YYYY-MM-DD（使用者當地日期）
-    time       TEXT DEFAULT '',        -- HH:MM
-    leg_raise  INTEGER,                -- 抬腿（次）
-    standing   INTEGER,                -- 站立（次）
-    walking    REAL,                   -- 行走（圈）
-    notes      TEXT DEFAULT '',        -- 備註 / 今天的感覺
-    photo      TEXT,                   -- 照片 base64 data URI
-    voice      TEXT,                   -- 語音 base64 data URI
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
 
-CREATE TABLE IF NOT EXISTS vitals (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    date          TEXT NOT NULL,
-    time          TEXT DEFAULT '',
-    systolic      INTEGER,             -- 收縮壓（高壓）
-    diastolic     INTEGER,             -- 舒張壓（低壓）
-    pulse         INTEGER,             -- 脈搏
-    blood_sugar   REAL,                -- 血糖 mg/dL
-    sugar_context TEXT DEFAULT '',     -- 空腹 / 飯前 / 飯後 / 睡前
-    notes         TEXT DEFAULT '',
-    created_at    TEXT DEFAULT '',
-    updated_at    TEXT DEFAULT ''
-);
+def _raw_connect():
+    if IS_PG:
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    # timeout：多個 gunicorn worker 同時寫入時，等待鎖釋放而不是直接報錯
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA journal_mode = WAL")  # 讀寫並行，降低 database is locked
+    return conn
 
-CREATE TABLE IF NOT EXISTS audit_log (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    action     TEXT,
-    detail     TEXT,
-    created_at TEXT DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_rehab_date  ON rehab(date);
-CREATE INDEX IF NOT EXISTS idx_vitals_date ON vitals(date);
-"""
+class DB:
+    """統一 SQLite / PostgreSQL 差異的薄封裝：
+      - 把查詢裡的 ? 佔位符轉成 PostgreSQL 的 %s
+      - insert() 取回新資料列的 id（兩種資料庫寫法不同）
+      - 兩者的資料列都能用 row["欄位名"] 存取
+    """
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, sql, params=()):
+        if IS_PG:
+            sql = sql.replace("?", "%s")
+        return self.conn.execute(sql, tuple(params))
+
+    def insert(self, sql, params=()):
+        if IS_PG:
+            cur = self.conn.execute(sql.replace("?", "%s") + " RETURNING id", tuple(params))
+            return cur.fetchone()["id"]
+        return self.conn.execute(sql, tuple(params)).lastrowid
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
 
 
 def get_db():
     if "db" not in g:
-        # timeout：多個 gunicorn worker 同時寫入時，等待鎖釋放而不是直接報錯
-        g.db = sqlite3.connect(DB_PATH, timeout=10)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
-        g.db.execute("PRAGMA busy_timeout = 10000")
-        g.db.execute("PRAGMA journal_mode = WAL")  # 讀寫並行，降低 database is locked
+        g.db = DB(_raw_connect())
     return g.db
 
 
@@ -129,11 +174,12 @@ def close_db(exc):
 
 
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.executescript(SCHEMA)
+    db = DB(_raw_connect())
+    for stmt in _schema_statements():
+        db.execute(stmt)
     # 確保 profile 有一列
-    cur = db.execute("SELECT COUNT(*) FROM profile")
-    if cur.fetchone()[0] == 0:
+    row = db.execute("SELECT COUNT(*) AS c FROM profile").fetchone()
+    if (row["c"] if row is not None else 0) == 0:
         db.execute(
             "INSERT INTO profile (id, name, start_date, updated_at) VALUES (1, '', '', ?)",
             (now_iso(),),
@@ -299,7 +345,7 @@ def create_rehab():
     if not date:
         return jsonify({"error": "date is required"}), 400
     db = get_db()
-    cur = db.execute(
+    new_id = db.insert(
         """INSERT INTO rehab
              (date, time, leg_raise, standing, walking, notes, photo, voice, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -316,9 +362,9 @@ def create_rehab():
             now_iso(),
         ),
     )
-    audit("REHAB_CREATE", f"#{cur.lastrowid} {date}")
+    audit("REHAB_CREATE", f"#{new_id} {date}")
     db.commit()
-    row = db.execute("SELECT * FROM rehab WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = db.execute("SELECT * FROM rehab WHERE id = ?", (new_id,)).fetchone()
     return jsonify(row_to_dict(row)), 201
 
 
@@ -387,7 +433,7 @@ def create_vitals():
     if not date:
         return jsonify({"error": "date is required"}), 400
     db = get_db()
-    cur = db.execute(
+    new_id = db.insert(
         """INSERT INTO vitals
              (date, time, systolic, diastolic, pulse, blood_sugar, sugar_context, notes, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -404,9 +450,9 @@ def create_vitals():
             now_iso(),
         ),
     )
-    audit("VITALS_CREATE", f"#{cur.lastrowid} {date}")
+    audit("VITALS_CREATE", f"#{new_id} {date}")
     db.commit()
-    row = db.execute("SELECT * FROM vitals WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = db.execute("SELECT * FROM vitals WHERE id = ?", (new_id,)).fetchone()
     return jsonify(row_to_dict(row)), 201
 
 
