@@ -200,9 +200,10 @@ textarea{resize:vertical}
 .tabbar button{
   flex:1;border:none;background:transparent;color:var(--muted);
   display:flex;flex-direction:column;align-items:center;gap:2px;
-  padding:8px 2px;height:var(--tabbar-h);font-size:.72rem;cursor:pointer;
+  padding:8px 1px;height:var(--tabbar-h);font-size:.68rem;cursor:pointer;
 }
-.tabbar__icon{font-size:1.35rem;line-height:1}
+.tabbar button span:last-child{white-space:nowrap}
+.tabbar__icon{font-size:1.28rem;line-height:1}
 .tabbar button.is-active{color:var(--green-700);font-weight:700}
 
 /* ---------------- 彈窗 ---------------- */
@@ -312,3 +313,15 @@ textarea{resize:vertical}
 .ex-sec p{margin:0 0 12px;font-size:1.02rem;line-height:1.6}
 .ex-good{background:var(--orange-050);border-left:4px solid var(--orange);border-radius:8px;
   padding:10px 12px;font-size:.95rem;color:#8a5a12}
+.ex-note{background:#eef3f1;border-radius:8px;padding:9px 11px;font-size:.86rem;
+  color:var(--green-700);margin-bottom:12px;line-height:1.55}
+
+/* ---------------- 留言板 ---------------- */
+.msg-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.msg{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.msg__head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.msg__author{font-weight:700;color:var(--green-700)}
+.msg__time{color:var(--muted);font-size:.78rem}
+.msg__del{margin-left:auto;border:none;background:transparent;color:#ccc;font-size:.9rem;cursor:pointer;padding:2px 6px}
+.msg__del:active{color:var(--danger)}
+.msg__text{font-size:1.12rem;line-height:1.65;white-space:pre-wrap;word-break:break-word;color:var(--ink)}

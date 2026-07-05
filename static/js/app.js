@@ -20,25 +20,35 @@ const state = {
   modalPeriod: "上午",  // 復健表單時段
 };
 
-/* ----------------------------- 復健動作資料（來自「復健動作AB分解圖.pdf」） --------------- */
-const EX_CATS = { "肌力訓練": "#2f6d5f", "進階運動": "#e0912f", "關節舒緩": "#4f6d9e" };
+/* ----------------------------- 復健動作資料 --------------------------------------------
+   1–9 來自「復健動作AB分解圖.pdf」；10–14 為家人提供的頭頸運動。gif 為 null 者僅顯示文字。 */
+const EX_CATS = { "肌力訓練": "#2f6d5f", "進階運動": "#e0912f", "關節舒緩": "#4f6d9e", "頭頸運動": "#8a5cc4" };
+const NECK_NOTE = "坐在有靠背的穩固椅子上、雙手扶好椅邊，用最安全、緩慢的速度進行。建議一天 2 組（早、晚各一組）。";
 const EXERCISES = [
-  { n: 1, name: "腳踝幫浦運動", cat: "肌力訓練", unit: "次", how: "腳尖用力向上勾，再向下踩，像踩油門一樣，慢慢反覆做。", good: "促進血液循環、消除腫脹。" },
-  { n: 2, name: "大腿壓毛巾", cat: "肌力訓練", unit: "次", how: "膝蓋下墊捲好的毛巾。用大腿力量把膝蓋向下壓毛巾，撐 5–10 秒再放鬆。", good: "訓練大腿力量，保護膝蓋和髖關節。" },
-  { n: 3, name: "直腿抬高", cat: "肌力訓練", unit: "次", how: "開刀的腿保持打直，慢慢往上抬高約 20–30 公分，停 5 秒再慢慢放下。", good: "訓練大腿肌力，讓走路更有力。" },
-  { n: 4, name: "坐姿抬腿（踢腿）", cat: "肌力訓練", unit: "次", how: "坐滿椅子，把膝蓋慢慢打直踢平、腳尖上勾，停 5 秒再慢慢放下。", good: "加強大腿前側肌肉。" },
-  { n: 5, name: "雙手高舉＋原地踏步", cat: "進階運動", unit: "次", how: "雙手像投降一樣往上舉高，同時雙腳在原地輕輕踏步。", good: "活動肩膀與全身關節，增加心肺耐力。" },
-  { n: 6, name: "點頭抬頭", cat: "關節舒緩", unit: "次", how: "吸氣時頭慢慢往上看，吐氣時下巴慢慢往下靠近胸口。", good: "放鬆肩頸，預防頭暈。" },
-  { n: 7, name: "左右轉頭", cat: "關節舒緩", unit: "次", how: "像看後照鏡一樣，頭慢慢轉向右邊、停 3 秒，再慢慢轉向左邊。", good: "放鬆頸部，增加活動度。" },
-  { n: 8, name: "繞肩膀", cat: "關節舒緩", unit: "圈", how: "雙肩往上聳起，再往後、往下繞圈。向前 5 圈、向後 5 圈。", good: "放鬆長期推助行器而緊繃的肩膀。" },
-  { n: 9, name: "推天抓空", cat: "關節舒緩", unit: "次", how: "雙手向上舉高，同時手指用力張開，再握拳。反覆 10 次。", good: "活動手部與肩膀關節。" },
-  { n: 10, name: "腳踝繞圈", cat: "關節舒緩", unit: "圈", how: "腳稍微往前伸、腳跟點地，用大腳趾在空中畫圓圈，順逆時針各 5 圈。", good: "活動踝關節，幫助血液回流、消水腫。" },
-  { n: 11, name: "坐姿抬腿（活動膝蓋）", cat: "關節舒緩", unit: "次", how: "雙手扶椅邊，把膝蓋打直踢平、腳尖上勾，停 3 秒放下。兩腳輪流。", good: "輕鬆活動膝關節，保護髖關節。" },
+  { n: 1, name: "腳踝幫浦運動", cat: "肌力訓練", unit: "次", gif: "ex01.gif", how: "腳尖用力向上勾，再向下踩，像踩油門一樣，慢慢反覆做。", good: "促進血液循環、消除腫脹。" },
+  { n: 2, name: "大腿壓毛巾", cat: "肌力訓練", unit: "次", gif: "ex02.gif", how: "膝蓋下墊捲好的毛巾。用大腿力量把膝蓋向下壓毛巾，撐 5–10 秒再放鬆。", good: "訓練大腿力量，保護膝蓋和髖關節。" },
+  { n: 3, name: "直腿抬高", cat: "肌力訓練", unit: "次", gif: "ex03.gif", how: "開刀的腿保持打直，慢慢往上抬高約 20–30 公分，停 5 秒再慢慢放下。", good: "訓練大腿肌力，讓走路更有力。" },
+  { n: 4, name: "坐姿抬腿（踢腿）", cat: "肌力訓練", unit: "次", gif: "ex04.gif", how: "坐滿椅子，把膝蓋慢慢打直踢平、腳尖上勾，停 5 秒再慢慢放下。", good: "加強大腿前側肌肉。" },
+  { n: 5, name: "雙手高舉＋原地踏步", cat: "進階運動", unit: "次", gif: "ex05.gif", how: "雙手像投降一樣往上舉高，同時雙腳在原地輕輕踏步。", good: "活動肩膀與全身關節，增加心肺耐力。" },
+  { n: 6, name: "繞肩膀", cat: "關節舒緩", unit: "圈", gif: "ex08.gif", how: "雙肩往上聳起，再往後、往下繞圈。向前 5 圈、向後 5 圈。", good: "放鬆長期推助行器而緊繃的肩膀。" },
+  { n: 7, name: "推天抓空", cat: "關節舒緩", unit: "次", gif: "ex09.gif", how: "雙手向上舉高，同時手指用力張開，再握拳。反覆 10 次。", good: "活動手部與肩膀關節。" },
+  { n: 8, name: "腳踝繞圈", cat: "關節舒緩", unit: "圈", gif: "ex10.gif", how: "腳稍微往前伸、腳跟點地，用大腳趾在空中畫圓圈，順逆時針各 5 圈。", good: "活動踝關節，幫助血液回流、消水腫。" },
+  { n: 9, name: "坐姿抬腿（活動膝蓋）", cat: "關節舒緩", unit: "次", gif: "ex11.gif", how: "雙手扶椅邊，把膝蓋打直踢平、腳尖上勾，停 3 秒放下。兩腳輪流。", good: "輕鬆活動膝關節，保護髖關節。" },
+  { n: 10, name: "頭部上下運動（點頭仰頭）", cat: "頭頸運動", unit: "次", gif: "ex06.gif", note: NECK_NOTE,
+    how: "下看：頭慢慢向下，下巴盡量貼近胸口，感覺脖子後側拉筋，停 5 秒。上看：頭慢慢回正，再慢往上看（看到牆與天花板交界即可，勿過度仰頭），停 5 秒。上下交替算 1 次，做 10 次。", good: "放鬆肩頸、增加頸部前後活動度。" },
+  { n: 11, name: "左右轉頭（看肩膀）", cat: "頭頸運動", unit: "次", gif: "ex07.gif", note: NECK_NOTE,
+    how: "頭慢慢向右轉，眼睛看向右肩，停 5 秒；回正後再慢慢向左轉、看向左肩，停 5 秒。左右交替算 1 次，做 10 次。", good: "放鬆頸部、增加左右活動度。" },
+  { n: 12, name: "左右側彎（耳朵貼肩膀）", cat: "頭頸運動", unit: "次", gif: null, note: NECK_NOTE,
+    how: "臉朝正前方，右耳慢慢往右肩靠（肩膀放鬆、不聳肩），感覺左頸拉筋，停 5 秒；回正後換左耳往左肩靠，停 5 秒。左右交替算 1 次，做 10 次。", good: "伸展頸部兩側，減少僵硬。" },
+  { n: 13, name: "雙手阻力壓頭（前後對抗）", cat: "頭頸運動", unit: "次", gif: null, note: NECK_NOTE,
+    how: "前壓：雙手輕擋前額，頭想微微前低、手稍用力擋住讓頭不動，感覺脖子前側出力，維持 5 秒放鬆。後壓：雙手移到後腦勺，頭想微微後仰、手往前擋住，維持 5 秒放鬆。前、後各做 10 次。", good: "訓練頸部前後肌力。" },
+  { n: 14, name: "單手溫和壓頭（側頸拉筋）", cat: "頭頸運動", unit: "次", gif: null, note: NECK_NOTE,
+    how: "右手指尖輕放左耳上方（手抬不高可請家人在後方協助），極輕柔把頭往右肩方向側壓，到左頸有微緊、舒服的拉筋感，停 5 秒；換左手壓右側，停 5 秒。左右交替算 1 次，做 10 次。", good: "溫和牽拉側頸，放鬆緊繃。" },
 ];
 const EX_BY_N = Object.fromEntries(EXERCISES.map((e) => [String(e.n), e]));
 const EX_TOTAL = EXERCISES.length;
 const PERIODS = ["上午", "下午", "晚上"];
-const gifUrl = (n) => `/static/gif/ex${pad(n)}.gif`;
+const gifUrl = (f) => `/static/gif/${f}`;
 function autoPeriod() {
   const h = new Date().getHours();
   return h < 12 ? "上午" : (h < 18 ? "下午" : "晚上");
@@ -111,6 +121,9 @@ const API = {
   createVitals: (b) => api("POST", "/api/vitals", b),
   updateVitals: (id, b) => api("PUT", `/api/vitals/${id}`, b),
   deleteVitals: (id) => api("DELETE", `/api/vitals/${id}`),
+  messages: () => api("GET", "/api/messages"),
+  createMessage: (b) => api("POST", "/api/messages", b),
+  deleteMessage: (id) => api("DELETE", `/api/messages/${id}`),
   restore: (b) => api("POST", "/api/restore", b),
 };
 
@@ -124,7 +137,56 @@ function switchTab(name) {
   else if (name === "rehab") renderRehabList();
   else if (name === "vitals") renderVitalsList();
   else if (name === "charts") renderCharts();
+  else if (name === "messages") renderMessages();
   else if (name === "settings") loadSettings();
+}
+
+/* ----------------------------- 留言板 ----------------------------- */
+function fmtStamp(s) {
+  // created_at 是 UTC "YYYY-MM-DD HH:MM:SS"，轉成當地時間顯示
+  if (!s) return "";
+  const d = new Date(s.replace(" ", "T") + "Z");
+  if (isNaN(d)) return esc(s);
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function renderMessages() {
+  const el = $("#messageList");
+  if (!el) return;
+  let rows;
+  try { rows = await API.messages(); } catch (e) { toast(e.message); return; }
+  if (!rows.length) {
+    el.innerHTML = `<div class="empty">還沒有留言。<br>在上面寫幾句話給爸爸加油吧！💪</div>`;
+    return;
+  }
+  el.innerHTML = rows.map((m) => `
+    <div class="msg">
+      <div class="msg__head">
+        <span class="msg__author">${esc(m.author) || "家人"}</span>
+        <span class="msg__time">${fmtStamp(m.created_at)}</span>
+        <button class="msg__del" data-del-msg="${m.id}" aria-label="刪除">✕</button>
+      </div>
+      <div class="msg__text">${esc(m.text)}</div>
+    </div>`).join("");
+}
+
+async function submitMessage() {
+  const text = $("#msgText").value.trim();
+  if (!text) { toast("請先寫一點留言"); return; }
+  const author = $("#msgAuthor").value.trim();
+  try {
+    await API.createMessage({ author, text });
+    $("#msgText").value = "";
+    if (author) localStorage.setItem("rehab_msg_author", author);
+    toast("已送出 ✔");
+    renderMessages();
+  } catch (e) { toast(e.message); }
+}
+
+async function deleteMessage(id) {
+  if (!confirm("確定要刪除這則留言嗎？")) return;
+  try { await API.deleteMessage(id); renderMessages(); }
+  catch (e) { toast(e.message); }
 }
 
 /* ----------------------------- 今日 ----------------------------- */
@@ -578,9 +640,11 @@ function openExInfo(n) {
   const e = EX_BY_N[String(n)];
   if (!e) return;
   $("#exInfoTitle").textContent = `${e.n}. ${e.name}`;
+  const gif = e.gif ? `<img class="ex-gif" src="${gifUrl(e.gif)}" alt="${esc(e.name)} 示範動畫" loading="lazy">` : "";
+  const note = e.note ? `<div class="ex-note">🪑 ${esc(e.note)}</div>` : "";
   $("#exInfoBody").innerHTML = `
     <div class="ex-cat-tag" style="background:${EX_CATS[e.cat]}">${esc(e.cat)}</div>
-    <img class="ex-gif" src="${gifUrl(e.n)}" alt="${esc(e.name)} 示範動畫" loading="lazy">
+    ${gif}${note}
     <div class="ex-sec"><h4>怎麼做</h4><p>${esc(e.how)}</p></div>
     <div class="ex-good">好處：${esc(e.good)}</div>`;
   $("#exInfoModal").hidden = false;
@@ -847,6 +911,8 @@ function bindEvents() {
   document.addEventListener("click", async (e) => {
     const info = e.target.closest("[data-info]");
     if (info) { openExInfo(info.dataset.info); return; }
+    const dm = e.target.closest("[data-del-msg]");
+    if (dm) { deleteMessage(Number(dm.dataset.delMsg)); return; }
     const rc = e.target.closest("[data-edit-rehab]");
     if (rc) {
       try {
@@ -921,6 +987,11 @@ function bindEvents() {
   $$("#rangeTabs button").forEach((b) => b.addEventListener("click", () => {
     state.chartRange = Number(b.dataset.range); renderCharts();
   }));
+
+  // 留言板
+  $("#msgSend").addEventListener("click", submitMessage);
+  const savedAuthor = localStorage.getItem("rehab_msg_author");
+  if (savedAuthor) $("#msgAuthor").value = savedAuthor;
 }
 
 async function main() {

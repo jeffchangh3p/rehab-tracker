@@ -61,11 +61,13 @@ def too_large(_e):
 
 BACKUP_VERSION = 2
 
-# 復健動作名稱（1–11），順序同「復健動作AB分解圖.pdf」。CSV 匯出的欄位標題用得到。
+# 復健動作名稱（1–14），須與前端 EXERCISES 的順序一致。CSV 匯出的欄位標題用得到。
 EXERCISE_NAMES = [
-    "腳踝幫浦運動", "大腿壓毛巾", "直腿抬高", "坐姿抬腿(踢腿)",
-    "雙手高舉+原地踏步", "點頭抬頭", "左右轉頭", "繞肩膀",
-    "推天抓空", "腳踝繞圈", "坐姿抬腿(活動膝蓋)",
+    "腳踝幫浦運動", "大腿壓毛巾", "直腿抬高", "坐姿抬腿(踢腿)",   # 肌力訓練
+    "雙手高舉+原地踏步",                                          # 進階運動
+    "繞肩膀", "推天抓空", "腳踝繞圈", "坐姿抬腿(活動膝蓋)",       # 關節舒緩
+    "頭部上下運動(點頭仰頭)", "左右轉頭(看肩膀)", "左右側彎(耳朵貼肩膀)",
+    "雙手阻力壓頭(前後對抗)", "單手溫和壓頭(側頸拉筋)",           # 頭頸運動
 ]
 
 
@@ -111,6 +113,12 @@ def _schema_statements():
             {idcol},
             action     TEXT,
             detail     TEXT,
+            created_at TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS messages (
+            {idcol},
+            author     TEXT DEFAULT '',
+            text       TEXT DEFAULT '',
             created_at TEXT DEFAULT ''
         )""",
         "CREATE INDEX IF NOT EXISTS idx_rehab_date  ON rehab(date)",
@@ -570,6 +578,41 @@ def delete_vitals(vid):
 
 
 # ---------------------------------------------------------------------------
+# API：留言板（給爸爸看的家人留言）
+# ---------------------------------------------------------------------------
+@app.route("/api/messages", methods=["GET"])
+def list_messages():
+    rows = get_db().execute("SELECT * FROM messages ORDER BY id DESC").fetchall()
+    return jsonify([row_to_dict(r) for r in rows])
+
+
+@app.route("/api/messages", methods=["POST"])
+def create_message():
+    d = request.get_json(force=True, silent=True) or {}
+    text = as_str(d.get("text"))
+    if not text:
+        return jsonify({"error": "留言內容不可空白"}), 400
+    db = get_db()
+    new_id = db.insert(
+        "INSERT INTO messages (author, text, created_at) VALUES (?, ?, ?)",
+        (as_str(d.get("author"))[:40], text[:2000], now_iso()),
+    )
+    audit("MESSAGE_CREATE", f"#{new_id}")
+    db.commit()
+    row = db.execute("SELECT * FROM messages WHERE id = ?", (new_id,)).fetchone()
+    return jsonify(row_to_dict(row)), 201
+
+
+@app.route("/api/messages/<int:mid>", methods=["DELETE"])
+def delete_message(mid):
+    db = get_db()
+    db.execute("DELETE FROM messages WHERE id = ?", (mid,))
+    audit("MESSAGE_DELETE", f"#{mid}")
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # API：今日彙總（目標達成進度）
 # ---------------------------------------------------------------------------
 @app.route("/api/summary")
@@ -608,6 +651,7 @@ def _backup_payload(db):
         "profile": row_to_dict(db.execute("SELECT * FROM profile WHERE id = 1").fetchone()),
         "rehab": [rehab_out(r) for r in db.execute("SELECT * FROM rehab ORDER BY id").fetchall()],
         "vitals": [row_to_dict(r) for r in db.execute("SELECT * FROM vitals ORDER BY id").fetchall()],
+        "messages": [row_to_dict(r) for r in db.execute("SELECT * FROM messages ORDER BY id").fetchall()],
         "audit_log": [row_to_dict(r) for r in db.execute("SELECT * FROM audit_log ORDER BY id").fetchall()],
     }
 
@@ -649,6 +693,7 @@ def restore():
     try:
         db.execute("DELETE FROM rehab")
         db.execute("DELETE FROM vitals")
+        db.execute("DELETE FROM messages")
         db.execute("DELETE FROM audit_log")
 
         prof = d.get("profile") or {}
@@ -706,6 +751,11 @@ def restore():
                     as_str(v.get("created_at")) or now_iso(),
                     as_str(v.get("updated_at")) or now_iso(),
                 ),
+            )
+        for m in d.get("messages", []) or []:
+            db.execute(
+                "INSERT INTO messages (author, text, created_at) VALUES (?, ?, ?)",
+                (as_str(m.get("author")), as_str(m.get("text")), as_str(m.get("created_at")) or now_iso()),
             )
         # 還原操作紀錄，讓備份是完整的來回（backup 有匯出 audit_log 就該還原）。
         for a in d.get("audit_log", []) or []:

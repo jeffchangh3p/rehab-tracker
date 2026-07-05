@@ -70,6 +70,21 @@
     <div id="chartsWrap"></div>
   </section>
 
+  <!-- ===================== 留言板 ===================== -->
+  <section class="view" data-view="messages" hidden>
+    <h2 class="section-title">留言板 <small>給爸爸的加油留言 💬</small></h2>
+    <div class="card">
+      <label class="field"><span>留言者（你的名字）</span>
+        <input type="text" id="msgAuthor" placeholder="例：小明" maxlength="40">
+      </label>
+      <label class="field"><span>留言</span>
+        <textarea id="msgText" rows="3" placeholder="寫幾句話給爸爸加油…" maxlength="2000"></textarea>
+      </label>
+      <button class="qbtn qbtn--orange full" id="msgSend">送出留言</button>
+    </div>
+    <div id="messageList" class="msg-list"></div>
+  </section>
+
   <!-- ===================== 設定 ===================== -->
   <section class="view" data-view="settings" hidden>
     <h2 class="section-title">基本資料</h2>
@@ -118,6 +133,7 @@
   <button data-tab="rehab"><span class="tabbar__icon">🦵</span><span>復健</span></button>
   <button data-tab="vitals"><span class="tabbar__icon">❤️</span><span>血壓血糖</span></button>
   <button data-tab="charts"><span class="tabbar__icon">📈</span><span>圖表</span></button>
+  <button data-tab="messages"><span class="tabbar__icon">💬</span><span>留言</span></button>
   <button data-tab="settings"><span class="tabbar__icon">⚙️</span><span>設定</span></button>
 </nav>
 
