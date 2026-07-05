@@ -183,6 +183,7 @@ async function renderMessages() {
   if (!el) return;
   let rows;
   try { rows = await API.messages(); } catch (e) { toast(e.message); return; }
+  setHeaderMsgs(rows);  // 同步更新頁首輪播
   if (!rows.length) {
     el.innerHTML = `<div class="empty">還沒有留言。<br>在上面寫幾句話給爸爸加油吧！💪</div>`;
     return;
@@ -892,9 +893,46 @@ function toggleSpeak() {
   window.speechSynthesis.speak(u);
 }
 
-function updateHeaderName() {
+/* 頁首輪播：名字問候 + 家人留言（格式「留言者：內容」），每 6 秒換一則 */
+const HEADER_ROTATE_MS = 6000;
+
+function headerLineFor(m) {
+  const t = String(m.text || "").replace(/\s+/g, " ").trim();
+  const s = `${(m.author || "").trim() || "家人"}：${t}`;
+  return s.length > 26 ? s.slice(0, 25) + "…" : s;
+}
+
+function rebuildHeaderItems() {
+  const el = $("#headerName");
+  const items = [];
   const n = state.profile && state.profile.name;
-  $("#headerName").textContent = n ? `${n} · 加油！` : "";
+  if (n) items.push(`${n} · 加油！`);
+  for (const m of state.headerMsgs || []) items.push(headerLineFor(m));
+  state.headerItems = items;
+  state.headerIdx = 0;
+  clearInterval(state.headerTimer);
+  if (!items.length) { el.textContent = ""; return; }
+  el.textContent = items[0];
+  el.style.opacity = "1";
+  if (items.length > 1) {
+    state.headerTimer = setInterval(() => {
+      state.headerIdx = (state.headerIdx + 1) % state.headerItems.length;
+      el.style.opacity = "0";
+      setTimeout(() => {
+        el.textContent = state.headerItems[state.headerIdx];  // textContent，不經 innerHTML，留言內容不會被當 HTML
+        el.style.opacity = "1";
+      }, 350);
+    }, HEADER_ROTATE_MS);
+  }
+}
+
+function setHeaderMsgs(rows) {
+  state.headerMsgs = Array.isArray(rows) ? rows.slice(0, 10) : [];  // 最新 10 則進輪播
+  rebuildHeaderItems();
+}
+
+function updateHeaderName() {
+  rebuildHeaderItems();
 }
 
 /* ----------------------------- 復健表單 ----------------------------- */
@@ -1125,7 +1163,11 @@ function doRestore(file) {
 
 /* ----------------------------- 初始化 ----------------------------- */
 async function bootProfile() {
-  try { state.profile = await API.profile(); updateHeaderName(); } catch (_) {}
+  try {
+    const [p, msgs] = await Promise.all([API.profile(), API.messages().catch(() => [])]);
+    state.profile = p;
+    setHeaderMsgs(msgs);
+  } catch (_) {}
 }
 
 function bindEvents() {
