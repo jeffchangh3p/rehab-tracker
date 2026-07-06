@@ -859,10 +859,18 @@ function closeExInfo() {
 function speakSupported() {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
+// 只選「國語（Mandarin）」，並明確排除粵語（zh-HK / yue / Sin-ji 等）。
+// iPad 上常有 zh-HK 粵語語音，一旦被選到就會用廣東話唸，所以要濾掉。
+function isCantonese(v) {
+  return /(^|[-_])(hk|yue)\b/i.test(v.lang || "") ||
+         /yue|粵|廣東|cantonese|sin[\-\s]?ji/i.test(v.name || "");
+}
 function pickZhVoice() {
   const vs = window.speechSynthesis.getVoices() || [];
-  return vs.find((v) => /zh[-_]?(TW|Hant|HK)/i.test(v.lang)) ||
-         vs.find((v) => /^zh/i.test(v.lang)) || null;
+  const mandarin = vs.filter((v) => /^(zh|cmn)/i.test(v.lang || "") && !isCantonese(v));
+  return mandarin.find((v) => /zh[-_](tw|hant)/i.test(v.lang)) ||   // 台灣國語優先
+         mandarin.find((v) => /zh[-_](cn|hans)/i.test(v.lang)) ||   // 其次大陸國語
+         mandarin[0] || null;
 }
 function stopSpeak() {
   if (speakSupported()) window.speechSynthesis.cancel();
@@ -883,10 +891,10 @@ function toggleSpeak() {
   const e = state.exInfoEx;
   if (!e) return;
   const u = new SpeechSynthesisUtterance(exSpeechText(e));
-  u.lang = "zh-TW";
+  u.lang = "zh-TW";  // 國語（台灣）
   u.rate = 0.85;  // 放慢一點，長輩比較聽得清楚
   const v = pickZhVoice();
-  if (v) u.voice = v;
+  if (v) { u.voice = v; u.lang = v.lang || "zh-TW"; }  // 用選到的國語語音，語言也對齊避免退回粵語
   u.onend = stopSpeak;
   u.onerror = stopSpeak;
   if (b) { b.classList.add("is-speaking"); b.textContent = "⏸ 停止"; }
