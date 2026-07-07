@@ -353,7 +353,7 @@ textarea{resize:vertical}
 
 /* ---------------- 動作示範彈窗 ---------------- */
 .ex-cat-tag{display:inline-block;color:#fff;border-radius:99px;padding:3px 12px;font-size:.82rem;font-weight:700;margin-bottom:10px}
-.ex-gif{width:100%;max-width:360px;display:block;margin:0 auto 14px;border-radius:14px;border:1px solid var(--line);background:#f7faf9}
+.ex-gif,.ex-anim{width:100%;max-width:360px;display:block;margin:0 auto 14px;border-radius:14px;border:1px solid var(--line);background:#f7faf9}
 .ex-sec h4{margin:0 0 4px;font-size:.95rem;color:var(--green-700)}
 .ex-sec p{margin:0 0 12px;font-size:1.02rem;line-height:1.6}
 .ex-good{background:var(--orange-050);border-left:4px solid var(--orange);border-radius:8px;

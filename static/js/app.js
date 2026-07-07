@@ -49,6 +49,94 @@ function genId() {
    1–9 來自「復健動作AB分解圖.pdf」；10–14 為家人提供的頭頸運動。gif 為 null 者僅顯示文字。 */
 const EX_CATS = { "肌力訓練": "#2f6d5f", "進階運動": "#e0912f", "關節舒緩": "#4f6d9e", "頭頸運動": "#8a5cc4" };
 const NECK_NOTE = "坐在有靠背的穩固椅子上、雙手扶好椅邊，用最安全、緩慢的速度進行。建議一天 2 組（早、晚各一組）。";
+
+/* 頭頸運動 12–14 沒有來源 GIF，改用內嵌向量動畫示範（輕量、清晰，iPad Safari 也能循環播放）。 */
+const NECK_ANIM = (function () {
+  const LINE = "#8a5cc4", SKIN = "#f4c9a1", ACT = "#e0912f", FACE = "#5a3d2b", HAIR = "#c9bdae", STEADY = "#2f6d5f";
+  // 手掌（手指朝上、手腕在原點，可平移／旋轉／縮放）
+  function hand(tx, ty, rot, sc) {
+    sc = sc || 1;
+    return `<g transform="translate(${tx} ${ty}) rotate(${rot}) scale(${sc})" fill="${SKIN}" stroke="${LINE}" stroke-width="2.2" stroke-linejoin="round">
+      <rect x="-13" y="-6" width="26" height="25" rx="9"/>
+      <rect x="-11.5" y="-22" width="6.4" height="18" rx="3.2"/>
+      <rect x="-4" y="-25" width="6.4" height="21" rx="3.2"/>
+      <rect x="3.4" y="-23" width="6.4" height="19" rx="3.2"/>
+      <rect x="10.4" y="-18" width="6" height="14" rx="3"/>
+      <rect x="-20" y="-3" width="8" height="15" rx="4" transform="rotate(-30 -16 4)"/>
+    </g>`;
+  }
+  // 正面頭部（#12／#14 共用）
+  const faceFront = `
+    <rect x="107" y="118" width="26" height="48" rx="11" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+    <circle cx="120" cy="90" r="40" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+    <path d="M83 84 Q84 50 120 50 Q156 50 157 84 Q140 66 120 66 Q100 66 83 84 Z" fill="${HAIR}"/>
+    <circle cx="80" cy="94" r="8" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+    <circle cx="160" cy="94" r="8" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+    <circle cx="105" cy="88" r="3.6" fill="${FACE}"/>
+    <circle cx="135" cy="88" r="3.6" fill="${FACE}"/>
+    <path d="M104 104 Q120 116 136 104" fill="none" stroke="${FACE}" stroke-width="2.6" stroke-linecap="round"/>`;
+  // 頭部左右緩擺的關鍵影格設定（停頓→擺動→回正，循環）
+  const rockKeys = `keyTimes="0;0.08;0.24;0.42;0.5;0.58;0.74;0.92;1" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.3 1;0 0 1 1;0.4 0 0.3 1;0 0 1 1;0.4 0 0.3 1;0 0 1 1;0.4 0 0.3 1;0 0 1 1"`;
+
+  const n12 = `
+<svg viewBox="0 0 240 210" class="ex-anim" role="img" aria-label="左右側彎示範動畫" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ah12" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="${ACT}"/></marker></defs>
+  <path d="M44 210 Q44 158 120 158 Q196 158 196 210 Z" fill="${LINE}"/>
+  <path d="M76 40 Q120 22 164 40" fill="none" stroke="${ACT}" stroke-width="3" stroke-linecap="round" marker-start="url(#ah12)" marker-end="url(#ah12)"/>
+  <g>
+    <animateTransform attributeName="transform" type="rotate" values="0 120 156;0 120 156;19 120 156;19 120 156;0 120 156;0 120 156;-19 120 156;-19 120 156;0 120 156" dur="6s" ${rockKeys}/>
+    ${faceFront}
+  </g>
+</svg>`;
+
+  const n13 = `
+<svg viewBox="0 0 260 210" class="ex-anim" role="img" aria-label="雙手阻力壓頭示範動畫" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ahH" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${ACT}"/></marker></defs>
+  <path d="M78 210 Q80 158 140 158 Q198 158 202 210 Z" fill="${LINE}"/>
+  <rect x="127" y="120" width="26" height="46" rx="11" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+  <circle cx="140" cy="88" r="42" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+  <path d="M101 82 L90 90 L101 98" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M120 48 Q168 48 178 92 Q176 62 140 60 Q124 60 116 68 Q112 52 120 48 Z" fill="${HAIR}"/>
+  <circle cx="168" cy="94" r="8" fill="${SKIN}" stroke="${LINE}" stroke-width="2.5"/>
+  <circle cx="120" cy="84" r="3.6" fill="${FACE}"/>
+  <path d="M104 104 Q114 110 126 105" fill="none" stroke="${FACE}" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="130" y="202" font-size="12.5" fill="${STEADY}" text-anchor="middle" font-weight="700">頭維持不動</text>
+  <g opacity="1">
+    <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.42;0.5;0.92;1" dur="5s" repeatCount="indefinite"/>
+    ${hand(68, 98, 6, 1)}
+    <line x1="80" y1="70" x2="103" y2="70" stroke="${ACT}" stroke-width="4" marker-end="url(#ahH)"/>
+    <text x="58" y="46" font-size="13" fill="${ACT}" text-anchor="middle" font-weight="700">前壓</text>
+  </g>
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.5;0.58;0.92;1" dur="5s" repeatCount="indefinite"/>
+    ${hand(214, 98, -6, 1)}
+    <line x1="202" y1="74" x2="180" y2="74" stroke="${ACT}" stroke-width="4" marker-end="url(#ahH)"/>
+    <text x="224" y="46" font-size="13" fill="${ACT}" text-anchor="middle" font-weight="700">後壓</text>
+  </g>
+</svg>`;
+
+  const n14 = `
+<svg viewBox="0 0 240 210" class="ex-anim" role="img" aria-label="單手溫和壓頭示範動畫" xmlns="http://www.w3.org/2000/svg">
+  <path d="M44 210 Q44 158 120 158 Q196 158 196 210 Z" fill="${LINE}"/>
+  <g>
+    <animateTransform attributeName="transform" type="rotate" values="0 120 156;0 120 156;14 120 156;14 120 156;0 120 156;0 120 156;-14 120 156;-14 120 156;0 120 156" dur="6.4s" ${rockKeys}/>
+    ${faceFront}
+    <g opacity="1">
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.42;0.5;0.92;1" dur="6.4s" repeatCount="indefinite"/>
+      ${hand(86, 58, 122, 0.92)}
+      <path d="M95 114 Q88 130 95 146" fill="none" stroke="${ACT}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="2.5 4"/>
+    </g>
+    <g opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.5;0.58;0.92;1" dur="6.4s" repeatCount="indefinite"/>
+      ${hand(154, 58, 238, 0.92)}
+      <path d="M145 114 Q152 130 145 146" fill="none" stroke="${ACT}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="2.5 4"/>
+    </g>
+  </g>
+</svg>`;
+
+  return { 12: n12, 13: n13, 14: n14 };
+})();
+
 const EXERCISES = [
   { n: 1, name: "腳踝幫浦運動", cat: "肌力訓練", unit: "次", gif: "ex01.gif", how: "腳尖用力向上勾，再向下踩，像踩油門一樣，慢慢反覆做。", good: "促進血液循環、消除腫脹。" },
   { n: 2, name: "大腿壓毛巾", cat: "肌力訓練", unit: "次", gif: "ex02.gif", how: "膝蓋下墊捲好的毛巾。用大腿力量把膝蓋向下壓毛巾，撐 5–10 秒再放鬆。", good: "訓練大腿力量，保護膝蓋和髖關節。" },
@@ -63,11 +151,11 @@ const EXERCISES = [
     how: "下看：頭慢慢向下，下巴盡量貼近胸口，感覺脖子後側拉筋，停 5 秒。上看：頭慢慢回正，再慢往上看（看到牆與天花板交界即可，勿過度仰頭），停 5 秒。上下交替算 1 次，做 10 次。", good: "放鬆肩頸、增加頸部前後活動度。" },
   { n: 11, name: "左右轉頭（看肩膀）", cat: "頭頸運動", unit: "次", gif: "ex07.gif", note: NECK_NOTE,
     how: "頭慢慢向右轉，眼睛看向右肩，停 5 秒；回正後再慢慢向左轉、看向左肩，停 5 秒。左右交替算 1 次，做 10 次。", good: "放鬆頸部、增加左右活動度。" },
-  { n: 12, name: "左右側彎（耳朵貼肩膀）", cat: "頭頸運動", unit: "次", gif: null, note: NECK_NOTE,
+  { n: 12, name: "左右側彎（耳朵貼肩膀）", cat: "頭頸運動", unit: "次", gif: null, anim: NECK_ANIM[12], note: NECK_NOTE,
     how: "臉朝正前方，右耳慢慢往右肩靠（肩膀放鬆、不聳肩），感覺左頸拉筋，停 5 秒；回正後換左耳往左肩靠，停 5 秒。左右交替算 1 次，做 10 次。", good: "伸展頸部兩側，減少僵硬。" },
-  { n: 13, name: "雙手阻力壓頭（前後對抗）", cat: "頭頸運動", unit: "次", gif: null, note: NECK_NOTE,
+  { n: 13, name: "雙手阻力壓頭（前後對抗）", cat: "頭頸運動", unit: "次", gif: null, anim: NECK_ANIM[13], note: NECK_NOTE,
     how: "前壓：雙手輕擋前額，頭想微微前低、手稍用力擋住讓頭不動，感覺脖子前側出力，維持 5 秒放鬆。後壓：雙手移到後腦勺，頭想微微後仰、手往前擋住，維持 5 秒放鬆。前、後各做 10 次。", good: "訓練頸部前後肌力。" },
-  { n: 14, name: "單手溫和壓頭（側頸拉筋）", cat: "頭頸運動", unit: "次", gif: null, note: NECK_NOTE,
+  { n: 14, name: "單手溫和壓頭（側頸拉筋）", cat: "頭頸運動", unit: "次", gif: null, anim: NECK_ANIM[14], note: NECK_NOTE,
     how: "右手指尖輕放左耳上方（手抬不高可請家人在後方協助），極輕柔把頭往右肩方向側壓，到左頸有微緊、舒服的拉筋感，停 5 秒；換左手壓右側，停 5 秒。左右交替算 1 次，做 10 次。", good: "溫和牽拉側頸，放鬆緊繃。" },
 ];
 const EX_BY_N = Object.fromEntries(EXERCISES.map((e) => [String(e.n), e]));
@@ -986,11 +1074,13 @@ function openExInfo(n) {
   stopSpeak();
   state.exInfoEx = e;
   $("#exInfoTitle").textContent = `${e.n}. ${e.name}`;
-  const gif = e.gif ? `<img class="ex-gif" src="${gifUrl(e.gif)}" alt="${esc(e.name)} 示範動畫" loading="lazy">` : "";
+  const media = e.gif
+    ? `<img class="ex-gif" src="${gifUrl(e.gif)}" alt="${esc(e.name)} 示範動畫" loading="lazy">`
+    : (e.anim || "");   // 頭頸運動 12–14 用內嵌向量動畫（已為固定內容，非使用者輸入）
   const note = e.note ? `<div class="ex-note">🪑 ${esc(e.note)}</div>` : "";
   $("#exInfoBody").innerHTML = `
     <div class="ex-cat-tag" style="background:${EX_CATS[e.cat]}">${esc(e.cat)}</div>
-    ${gif}${note}
+    ${media}${note}
     <div class="ex-sec"><h4>怎麼做</h4><p>${esc(e.how)}</p></div>
     <div class="ex-good">好處：${esc(e.good)}</div>`;
   const sb = $("#exSpeakBtn");
