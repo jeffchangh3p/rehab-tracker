@@ -599,14 +599,25 @@ async function renderCharts() {
     const [i, per] = key.split("|");
     perSeries[per][Number(i)] = perSets[key].size;
   }
-  // 血壓 / 血糖：取當日最後一筆（時間最大）
-  const sys = blank(), dia = blank(), sugar = blank();
-  const seen = {};
+  // 血壓：取當日最後一筆；血糖：依「時機」分線（空腹/飯後… 混在一起沒有意義）
+  const sys = blank(), dia = blank();
+  const SUGAR_CTX = [
+    { key: "空腹", color: "#3b6d11" },   // 綠：空腹（基準）
+    { key: "飯前", color: "#1d9e75" },   // 青綠
+    { key: "飯後", color: "#d85a30" },   // 橘紅：飯後（通常較高）
+    { key: "睡前", color: "#8a5cc4" },   // 紫
+    { key: "未註明", color: "#9aa8a3" }, // 灰：沒填時機
+  ];
+  const sugarByCtx = {};
+  SUGAR_CTX.forEach((c) => (sugarByCtx[c.key] = blank()));
   for (const v of [...vitals].sort((a, b) => (a.time || "").localeCompare(b.time || ""))) {
     const i = idx.get(v.date); if (i === undefined) continue;
     if (v.systolic != null) sys[i] = v.systolic;
     if (v.diastolic != null) dia[i] = v.diastolic;
-    if (v.blood_sugar != null) sugar[i] = Number(v.blood_sugar);
+    if (v.blood_sugar != null) {
+      const ctx = SUGAR_CTX.some((c) => c.key === v.sugar_context) ? v.sugar_context : "未註明";
+      sugarByCtx[ctx][i] = Number(v.blood_sugar);
+    }
   }
 
   const has = (arr) => arr.some((v) => v != null);
@@ -624,9 +635,10 @@ async function renderCharts() {
         { name: "舒張壓", color: "#e0912f", values: dia },
       ]}));
   }
-  if (has(sugar)) {
-    html += chartCard("血糖趨勢", "mg/dL",
-      buildChart({ type: "line", labels, series: [{ name: "血糖", color: "#8a5cc4", values: sugar }] }));
+  const sugarSeries = SUGAR_CTX.filter((c) => has(sugarByCtx[c.key]))
+    .map((c) => ({ name: c.key, color: c.color, values: sugarByCtx[c.key] }));
+  if (sugarSeries.length) {
+    html += chartCard("血糖趨勢", "mg/dL · 依時機分線", buildChart({ type: "line", labels, series: sugarSeries }));
   }
   wrap.innerHTML = html || `<div class="empty">這個時間範圍內沒有資料，換個範圍看看。</div>`;
 }
