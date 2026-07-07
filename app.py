@@ -890,11 +890,31 @@ def _backup_payload(db):
     }
 
 
+@app.route("/api/backup-status")
+def backup_status():
+    db = get_db()
+    raw = _get_setting("last_backup_at")
+    days = None
+    if raw:
+        try:
+            last = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            days = (datetime.now(timezone.utc) - last).days
+        except ValueError:
+            days = None
+    has_data = bool(
+        db.execute("SELECT 1 FROM rehab LIMIT 1").fetchone()
+        or db.execute("SELECT 1 FROM vitals LIMIT 1").fetchone()
+        or db.execute("SELECT 1 FROM messages LIMIT 1").fetchone()
+    )
+    return jsonify({"last_backup_at": raw or "", "days_since": days, "has_data": has_data})
+
+
 @app.route("/api/backup")
 def backup():
     db = get_db()
     payload = _backup_payload(db)
     audit("BACKUP_EXPORT", f"{len(payload['rehab'])} rehab, {len(payload['vitals'])} vitals")
+    _set_setting("last_backup_at", now_iso())  # 記錄上次備份時間（給備份提醒用）
     db.commit()
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     body = json.dumps(payload, ensure_ascii=False, indent=2)

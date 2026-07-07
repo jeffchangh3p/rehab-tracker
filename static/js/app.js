@@ -156,6 +156,7 @@ const API = {
   saveSchedule: (b) => api("PUT", "/api/schedule", b),
   scheduleLog: (date) => api("GET", `/api/schedule/log?date=${date}`),
   scheduleCheck: (b) => api("POST", "/api/schedule/check", b),
+  backupStatus: () => api("GET", "/api/backup-status"),
   restore: (b) => api("POST", "/api/restore", b),
 };
 
@@ -244,6 +245,7 @@ async function renderToday() {
 
   state.schedule = schedule;
   renderTimeline(rehab, vitals);
+  renderBackupReminder();
 
   const wd = String(parseDate(state.today).getDay());
   const hasTodayPlan = schedule && schedule.enabled && (((schedule.plan || {})[wd] || []).length > 0);
@@ -255,6 +257,44 @@ async function renderToday() {
     $("#goals").hidden = false;
     $("#todaySchedule").innerHTML = "";
     renderCompletion(summary);
+  }
+}
+
+/* ----------------------------- 備份提醒 ----------------------------- */
+const BACKUP_REMIND_DAYS = 7;
+
+function backupReminderText(st) {
+  if (!st || !st.has_data) return null;  // 沒資料就不用提醒
+  const d = st.days_since;
+  if (d === null || d === undefined) return "還沒有下載過備份，建議下載一次保存起來";
+  if (d >= BACKUP_REMIND_DAYS) return `已 ${d} 天沒下載備份，建議現在下載一次`;
+  return null;
+}
+
+async function renderBackupReminder() {
+  const el = $("#backupReminder");
+  if (!el) return;
+  let st;
+  try { st = await API.backupStatus(); } catch (_) { el.hidden = true; return; }
+  const msg = backupReminderText(st);
+  if (!msg) { el.hidden = true; el.innerHTML = ""; return; }
+  el.innerHTML = `<span class="backup-reminder__t">⚠ ${esc(msg)} 📥</span>
+    <a class="backup-reminder__btn" href="/api/backup" data-backup-now>⬇ 下載備份</a>`;
+  el.hidden = false;
+}
+
+async function renderLastBackupInfo() {
+  const el = $("#lastBackupInfo");
+  if (!el) return;
+  let st;
+  try { st = await API.backupStatus(); } catch (_) { return; }
+  const d = st.days_since;
+  if (d === null || d === undefined) {
+    el.textContent = st.has_data ? "尚未下載過備份，建議下載一次。" : "尚未下載過備份。";
+    el.classList.toggle("warn", !!st.has_data);
+  } else {
+    el.textContent = `上次備份：${d === 0 ? "今天" : d + " 天前"}` + (d >= BACKUP_REMIND_DAYS ? "，建議再下載一次" : "");
+    el.classList.toggle("warn", d >= BACKUP_REMIND_DAYS);
   }
 }
 
@@ -728,6 +768,7 @@ async function loadSettings() {
   populateSchedExerciseSelect();
   schedTypeChange();
   renderScheduleEditor();
+  renderLastBackupInfo();
 }
 
 /* ----------------------------- 課表編輯 ----------------------------- */
@@ -1300,6 +1341,11 @@ function bindEvents() {
     // 點縮圖看大圖（要放在編輯卡片判斷之前，避免同時開啟編輯視窗）
     const zimg = e.target.closest(".rec__media img, .media-preview img");
     if (zimg) { e.stopPropagation(); openImage(zimg.currentSrc || zimg.src); return; }
+    // 按下任一個下載備份 → 樂觀地收起提醒（伺服器端會記錄時間，下次載入自然不再提醒）
+    if (e.target.closest("[data-backup-now], #settingsBackupBtn")) {
+      const br = $("#backupReminder"); if (br) br.hidden = true;
+      const li = $("#lastBackupInfo"); if (li) { li.textContent = "剛剛已下載備份 ✔"; li.classList.remove("warn"); }
+    }
     const info = e.target.closest("[data-info]");
     if (info) { openExInfo(info.dataset.info); return; }
     const dm = e.target.closest("[data-del-msg]");

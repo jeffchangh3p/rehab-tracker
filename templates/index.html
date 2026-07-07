@@ -21,6 +21,7 @@
 
   <!-- ===================== 今日 ===================== -->
   <section class="view" data-view="today">
+    <div id="backupReminder" class="backup-reminder" hidden></div>
     <div class="date-picker">
       <button class="date-picker__nav" id="todayPrev" aria-label="前一天">‹</button>
       <input type="date" id="todayDate" class="date-picker__input">
@@ -163,7 +164,8 @@
     <h2 class="section-title">備份與匯出</h2>
     <div class="card">
       <p class="muted">資料很重要，建議定期下載備份存到手機或電腦。</p>
-      <a class="linkbtn" href="/api/backup">⬇ 下載備份檔（JSON）</a>
+      <a class="linkbtn" id="settingsBackupBtn" href="/api/backup">⬇ 下載備份檔（JSON）</a>
+      <p class="tiny" id="lastBackupInfo" style="text-align:left;margin:2px 2px 6px"></p>
       <p class="tiny" style="text-align:left;margin:2px 2px 12px">✓ 已包含全部：復健紀錄、血壓血糖、留言、課表設定、照片與語音。</p>
       <button class="linkbtn" id="restoreBtn">⬆ 從備份檔還原</button>
       <input type="file" id="restoreFile" accept="application/json" hidden>
