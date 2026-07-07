@@ -143,8 +143,31 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 .chip--bp{background:#fdece9;color:#b23a2c}
 .rec__notes{margin-top:6px;font-size:.92rem;color:#444;word-break:break-word}
 .rec__media{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
-.rec__media img{width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--line);cursor:zoom-in}
+.rec--rehab{cursor:default}
+.rec--rehab:active{background:var(--paper)}
+.rec__media{flex-wrap:wrap}
+.rec__media img{width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);cursor:zoom-in}
 .media-preview img{cursor:zoom-in}
+
+/* 復健卡：編輯鈕 + 按讚 + 留言 */
+.rec__edit{margin-left:auto;border:none;background:var(--green-050);color:var(--green-700);
+  border-radius:99px;padding:3px 10px;font-size:.78rem;font-weight:600;cursor:pointer;flex:0 0 auto}
+.rec__time{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rec-social{display:flex;align-items:center;gap:14px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.rec-like{border:none;background:transparent;cursor:pointer;font-size:.95rem;color:var(--muted);padding:2px 4px;font-weight:600}
+.rec-like.on{color:var(--danger)}
+.rec-cc{color:var(--muted);font-size:.9rem}
+.rec-comments{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.rc{font-size:1rem;line-height:1.5;background:var(--green-050);border-radius:10px;padding:7px 10px;
+  display:flex;align-items:baseline;gap:2px;word-break:break-word}
+.rc__a{color:var(--green-700);font-weight:700;flex:0 0 auto}
+.rc>span{flex:1;min-width:0;white-space:pre-wrap}
+.rc__x{border:none;background:transparent;color:#c9c9c9;cursor:pointer;font-size:.8rem;padding:0 2px;flex:0 0 auto}
+.rc__x:active{color:var(--danger)}
+.rec-addc{display:flex;gap:8px;margin-top:8px}
+.rec-addc .rc-input{flex:1;min-width:0}
+.rec-addc .rc-send{flex:0 0 auto;border:none;background:var(--orange);color:#fff;border-radius:12px;
+  padding:0 16px;font-size:.92rem;font-weight:700;cursor:pointer}
 .rec__media audio{height:34px;max-width:100%}
 
 /* ---------------- 圖表 ---------------- */

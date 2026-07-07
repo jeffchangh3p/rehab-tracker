@@ -91,7 +91,8 @@ def _schema_statements():
             time       TEXT DEFAULT '',
             items      TEXT DEFAULT '{{}}',   -- JSON：{{"動作編號": 次數或 null}}，有 key 代表當次有做
             notes      TEXT DEFAULT '',
-            photo      TEXT,
+            photo      TEXT,                  -- 舊版單張照片（相容用；新版存在 photos）
+            photos     TEXT DEFAULT '[]',     -- JSON 陣列：多張照片（最多 5 張）的 base64
             voice      TEXT,
             created_at TEXT DEFAULT '',
             updated_at TEXT DEFAULT ''
@@ -130,9 +131,26 @@ def _schema_statements():
             item_id    TEXT NOT NULL,
             created_at TEXT DEFAULT ''
         )""",
+        # 針對某筆復健紀錄的留言
+        f"""CREATE TABLE IF NOT EXISTS rehab_comments (
+            {idcol},
+            rehab_id   INTEGER NOT NULL,
+            author     TEXT DEFAULT '',
+            text       TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        )""",
+        # 針對某筆復健紀錄的按讚（每個名字一次）
+        f"""CREATE TABLE IF NOT EXISTS rehab_likes (
+            {idcol},
+            rehab_id   INTEGER NOT NULL,
+            liker      TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        )""",
         "CREATE INDEX IF NOT EXISTS idx_rehab_date  ON rehab(date)",
         "CREATE INDEX IF NOT EXISTS idx_vitals_date ON vitals(date)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_log_uniq ON schedule_log(date, item_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rc_rehab ON rehab_comments(rehab_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_rl_uniq ON rehab_likes(rehab_id, liker)",
     ]
 
 
@@ -226,6 +244,8 @@ def _migrate(db):
         todo.append(add + "period TEXT DEFAULT ''")
     if "items" not in existing:
         todo.append(add + "items TEXT DEFAULT '{}'")
+    if "photos" not in existing:
+        todo.append(add + "photos TEXT DEFAULT '[]'")  # 多張照片；舊的單張 photo 保留、讀取時合併
     for sql in todo:
         try:
             db.execute(sql)
@@ -389,10 +409,49 @@ def clean_items(raw):
     return out
 
 
-def rehab_out(row):
-    """rehab 資料列轉 dict，並把 items 由 JSON 字串還原成物件。"""
+MAX_PHOTOS = 5
+
+
+def clean_photos(raw):
+    """整理照片陣列 → 最多 5 張非空字串（base64 data URI）。"""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            raw = []
+    if not isinstance(raw, list):
+        return []
+    return [x for x in raw if isinstance(x, str) and x][:MAX_PHOTOS]
+
+
+def photo_list(d):
+    """合併舊的單張 photo 與新的 photos 陣列，給前端顯示用。"""
+    out = []
+    if d.get("photo"):
+        out.append(d["photo"])
+    out.extend(clean_photos(d.get("photos")))
+    return out[:MAX_PHOTOS]
+
+
+def photos_json_from_req(d):
+    """從請求取出照片陣列（相容舊的單張 photo），回傳要存進 photos 欄位的 JSON 字串。"""
+    photos = d.get("photos")
+    if photos is None and d.get("photo"):
+        photos = [d.get("photo")]
+    return json.dumps(clean_photos(photos), ensure_ascii=False)
+
+
+def rehab_row_raw(row):
+    """原始欄位（photo / photos 保持原樣，供備份完整來回）+ items 還原成物件。"""
     d = row_to_dict(row)
     d["items"] = clean_items(d.get("items"))
+    return d
+
+
+def rehab_out(row):
+    """給前端：raw 欄位 + items 物件 + photo_list（合併後的照片陣列，最多 5 張）。"""
+    d = rehab_row_raw(row)
+    d["photo_list"] = photo_list(d)
     return d
 
 
@@ -434,7 +493,25 @@ def list_rehab():
         rows = db.execute(
             "SELECT * FROM rehab ORDER BY date DESC, time DESC, id DESC"
         ).fetchall()
-    return jsonify([rehab_out(r) for r in rows])
+    out = [rehab_out(r) for r in rows]
+    _attach_social(db, out)
+    return jsonify(out)
+
+
+def _attach_social(db, rows):
+    """把每筆復健紀錄的留言與按讚一起帶出來（資料量小，一次抓完在 Python 分組）。"""
+    if not rows:
+        return rows
+    cmap, lmap = {}, {}
+    for c in db.execute("SELECT * FROM rehab_comments ORDER BY id").fetchall():
+        cmap.setdefault(c["rehab_id"], []).append(
+            {"id": c["id"], "author": c["author"] or "", "text": c["text"] or "", "created_at": c["created_at"] or ""})
+    for lk in db.execute("SELECT rehab_id, liker FROM rehab_likes").fetchall():
+        lmap.setdefault(lk["rehab_id"], []).append(lk["liker"] or "")
+    for r in rows:
+        r["comments"] = cmap.get(r["id"], [])
+        r["likers"] = lmap.get(r["id"], [])
+    return rows
 
 
 @app.route("/api/rehab", methods=["POST"])
@@ -446,15 +523,16 @@ def create_rehab():
     db = get_db()
     new_id = db.insert(
         """INSERT INTO rehab
-             (date, period, time, items, notes, photo, voice, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             (date, period, time, items, notes, photo, photos, voice, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             date,
             as_str(d.get("period")),
             as_str(d.get("time")),
             json.dumps(clean_items(d.get("items")), ensure_ascii=False),
             as_str(d.get("notes")),
-            d.get("photo") or None,
+            None,  # 新版不用單張 photo，統一存 photos
+            photos_json_from_req(d),
             d.get("voice") or None,
             now_iso(),
             now_iso(),
@@ -476,7 +554,7 @@ def update_rehab(rid):
     db.execute(
         """UPDATE rehab SET
              date = ?, period = ?, time = ?, items = ?,
-             notes = ?, photo = ?, voice = ?, updated_at = ?
+             notes = ?, photo = ?, photos = ?, voice = ?, updated_at = ?
            WHERE id = ?""",
         (
             as_str(d.get("date")),
@@ -484,7 +562,8 @@ def update_rehab(rid):
             as_str(d.get("time")),
             json.dumps(clean_items(d.get("items")), ensure_ascii=False),
             as_str(d.get("notes")),
-            d.get("photo") or None,
+            None,  # 統一改存 photos，清掉舊的單張 photo（原本的照片已在前端載入、會一起送回 photos）
+            photos_json_from_req(d),
             d.get("voice") or None,
             now_iso(),
             rid,
@@ -500,9 +579,58 @@ def update_rehab(rid):
 def delete_rehab(rid):
     db = get_db()
     db.execute("DELETE FROM rehab WHERE id = ?", (rid,))
+    db.execute("DELETE FROM rehab_comments WHERE rehab_id = ?", (rid,))
+    db.execute("DELETE FROM rehab_likes WHERE rehab_id = ?", (rid,))
     audit("REHAB_DELETE", f"#{rid}")
     db.commit()
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# API：復健紀錄的留言與按讚
+# ---------------------------------------------------------------------------
+@app.route("/api/rehab/<int:rid>/comments", methods=["POST"])
+def add_rehab_comment(rid):
+    d = request.get_json(force=True, silent=True) or {}
+    text = as_str(d.get("text"))
+    if not text:
+        return jsonify({"error": "留言內容不可空白"}), 400
+    db = get_db()
+    if not db.execute("SELECT id FROM rehab WHERE id = ?", (rid,)).fetchone():
+        return jsonify({"error": "not found"}), 404
+    author = (as_str(d.get("author")) or "家人")[:40]
+    new_id = db.insert(
+        "INSERT INTO rehab_comments (rehab_id, author, text, created_at) VALUES (?, ?, ?, ?)",
+        (rid, author, text[:1000], now_iso()),
+    )
+    audit("REHAB_COMMENT", f"#{rid}")
+    db.commit()
+    return jsonify({"id": new_id, "author": author, "text": text[:1000], "created_at": now_iso()}), 201
+
+
+@app.route("/api/rehab/comments/<int:cid>", methods=["DELETE"])
+def delete_rehab_comment(cid):
+    db = get_db()
+    db.execute("DELETE FROM rehab_comments WHERE id = ?", (cid,))
+    audit("REHAB_COMMENT_DEL", f"#{cid}")
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/rehab/<int:rid>/like", methods=["POST"])
+def toggle_rehab_like(rid):
+    d = request.get_json(force=True, silent=True) or {}
+    liker = (as_str(d.get("liker")) or "家人")[:40]
+    db = get_db()
+    if not db.execute("SELECT id FROM rehab WHERE id = ?", (rid,)).fetchone():
+        return jsonify({"error": "not found"}), 404
+    if bool(d.get("like")):
+        _rehab_like_insert(db, rid, liker, now_iso())
+    else:
+        db.execute("DELETE FROM rehab_likes WHERE rehab_id = ? AND liker = ?", (rid, liker))
+    db.commit()
+    likers = [r["liker"] for r in db.execute("SELECT liker FROM rehab_likes WHERE rehab_id = ?", (rid,)).fetchall()]
+    return jsonify({"likers": likers})
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +782,16 @@ def _sched_log_insert(db, date, item_id, created_at):
                    (date, item_id, created_at))
 
 
+def _rehab_like_insert(db, rid, liker, created_at):
+    """按讚，重複 (rehab_id,liker) 直接忽略。"""
+    if IS_PG:
+        db.execute("INSERT INTO rehab_likes (rehab_id, liker, created_at) VALUES (?, ?, ?) "
+                   "ON CONFLICT (rehab_id, liker) DO NOTHING", (rid, liker, created_at))
+    else:
+        db.execute("INSERT OR IGNORE INTO rehab_likes (rehab_id, liker, created_at) VALUES (?, ?, ?)",
+                   (rid, liker, created_at))
+
+
 @app.route("/api/schedule", methods=["GET"])
 def get_schedule():
     raw = _get_setting("schedule")
@@ -740,11 +878,14 @@ def _backup_payload(db):
         "version": BACKUP_VERSION,
         "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "profile": row_to_dict(db.execute("SELECT * FROM profile WHERE id = 1").fetchone()),
-        "rehab": [rehab_out(r) for r in db.execute("SELECT * FROM rehab ORDER BY id").fetchall()],
+        # 用 raw 欄位（photo + photos），不含合併後的 photo_list，避免照片 base64 在備份裡重複、檔案變兩倍
+        "rehab": [rehab_row_raw(r) for r in db.execute("SELECT * FROM rehab ORDER BY id").fetchall()],
         "vitals": [row_to_dict(r) for r in db.execute("SELECT * FROM vitals ORDER BY id").fetchall()],
         "messages": [row_to_dict(r) for r in db.execute("SELECT * FROM messages ORDER BY id").fetchall()],
         "settings": [row_to_dict(r) for r in db.execute("SELECT * FROM settings ORDER BY key").fetchall()],
         "schedule_log": [row_to_dict(r) for r in db.execute("SELECT * FROM schedule_log ORDER BY id").fetchall()],
+        "rehab_comments": [row_to_dict(r) for r in db.execute("SELECT * FROM rehab_comments ORDER BY id").fetchall()],
+        "rehab_likes": [row_to_dict(r) for r in db.execute("SELECT * FROM rehab_likes ORDER BY id").fetchall()],
         "audit_log": [row_to_dict(r) for r in db.execute("SELECT * FROM audit_log ORDER BY id").fetchall()],
     }
 
@@ -787,6 +928,9 @@ def restore():
         db.execute("DELETE FROM rehab")
         db.execute("DELETE FROM vitals")
         db.execute("DELETE FROM audit_log")
+        # 留言/按讚是綁在 rehab 上的，rehab 每次都會整個重建，所以一律清空再依對應表重灌
+        db.execute("DELETE FROM rehab_comments")
+        db.execute("DELETE FROM rehab_likes")
         # 較新的資料表只在備份檔真的含有該區塊時才清空，
         # 這樣還原「舊版備份」不會把留言 / 課表一起清掉。
         if "messages" in d:
@@ -802,6 +946,7 @@ def restore():
             (as_str(prof.get("name")), as_str(prof.get("start_date")), now_iso()),
         )
 
+        rehab_id_map = {}  # 備份的舊 id -> 還原後的新 id（留言/按讚要重新對應）
         for r in d.get("rehab", []):
             items = clean_items(r.get("items"))
             notes = as_str(r.get("notes"))
@@ -818,10 +963,10 @@ def restore():
                 if legacy:
                     tag = "（舊版紀錄）" + "、".join(legacy)
                     notes = (notes + "　" + tag).strip() if notes else tag
-            db.execute(
+            new_id = db.insert(
                 """INSERT INTO rehab
-                     (date, period, time, items, notes, photo, voice, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (date, period, time, items, notes, photo, photos, voice, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     as_str(r.get("date")),
                     as_str(r.get("period")),
@@ -829,11 +974,14 @@ def restore():
                     json.dumps(items, ensure_ascii=False),
                     notes,
                     r.get("photo") or None,
+                    json.dumps(clean_photos(r.get("photos")), ensure_ascii=False),
                     r.get("voice") or None,
                     as_str(r.get("created_at")) or now_iso(),
                     as_str(r.get("updated_at")) or now_iso(),
                 ),
             )
+            if r.get("id") is not None:
+                rehab_id_map[r.get("id")] = new_id
         for v in d.get("vitals", []):
             db.execute(
                 """INSERT INTO vitals
@@ -865,6 +1013,15 @@ def restore():
             if as_str(sl.get("date")) and as_str(sl.get("item_id")):
                 _sched_log_insert(db, as_str(sl.get("date")), as_str(sl.get("item_id")),
                                   as_str(sl.get("created_at")) or now_iso())
+        for c in d.get("rehab_comments", []) or []:
+            nid = rehab_id_map.get(c.get("rehab_id"))
+            if nid is not None and as_str(c.get("text")):
+                db.execute("INSERT INTO rehab_comments (rehab_id, author, text, created_at) VALUES (?, ?, ?, ?)",
+                           (nid, as_str(c.get("author")), as_str(c.get("text")), as_str(c.get("created_at")) or now_iso()))
+        for lk in d.get("rehab_likes", []) or []:
+            nid = rehab_id_map.get(lk.get("rehab_id"))
+            if nid is not None and as_str(lk.get("liker")):
+                _rehab_like_insert(db, nid, as_str(lk.get("liker")), as_str(lk.get("created_at")) or now_iso())
         # 還原操作紀錄，讓備份是完整的來回（backup 有匯出 audit_log 就該還原）。
         for a in d.get("audit_log", []) or []:
             db.execute(

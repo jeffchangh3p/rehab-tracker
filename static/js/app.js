@@ -14,8 +14,9 @@ const state = {
   chartRange: 7,
   editingRehab: null,   // 目前編輯中的復健紀錄 id
   editingVitals: null,
-  modalPhoto: null,     // data URI 或 null
+  modalPhotos: [],      // 照片 data URI 陣列（最多 5 張）
   modalVoice: null,     // data URI 或 null
+  rehabById: {},        // 目前畫面上的復健紀錄，id -> row（按讚/留言後就地更新）
   modalItems: {},       // 復健表單勾選：{"1": 次數或 null}
   modalPeriod: "上午",  // 復健表單時段
   exInfoEx: null,       // 目前示範彈窗顯示的動作（語音朗讀用）
@@ -148,6 +149,9 @@ const API = {
   messages: () => api("GET", "/api/messages"),
   createMessage: (b) => api("POST", "/api/messages", b),
   deleteMessage: (id) => api("DELETE", `/api/messages/${id}`),
+  rehabComment: (id, b) => api("POST", `/api/rehab/${id}/comments`, b),
+  deleteRehabComment: (cid) => api("DELETE", `/api/rehab/comments/${cid}`),
+  rehabLike: (id, b) => api("POST", `/api/rehab/${id}/like`, b),
   schedule: () => api("GET", "/api/schedule"),
   saveSchedule: (b) => api("PUT", "/api/schedule", b),
   scheduleLog: (date) => api("GET", `/api/schedule/log?date=${date}`),
@@ -341,7 +345,12 @@ function recCard(r) {
   return vitalsCard(r);
 }
 
-function rehabCard(r) {
+function currentUserName() {
+  return (localStorage.getItem("rehab_msg_author") || "").trim();
+}
+
+function rehabCard(r, full = false) {
+  state.rehabById[r.id] = r;  // 記住，按讚/留言後可就地更新
   const items = r.items || {};
   const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
   const chips = keys.map((n) => {
@@ -352,20 +361,83 @@ function rehabCard(r) {
     return `<span class="chip">${esc(nm)}${cnt}</span>`;
   });
   if (!chips.length) chips.push(`<span class="chip chip--empty">未勾選動作</span>`);
-  const media = [];
-  if (r.photo) media.push(`<img src="${esc(r.photo)}" alt="照片">`);
+  const photos = (r.photo_list && r.photo_list.length) ? r.photo_list : (r.photo ? [r.photo] : []);
+  const media = photos.map((p) => `<img src="${esc(p)}" alt="照片">`);
   if (r.voice) media.push(`<audio controls src="${esc(r.voice)}"></audio>`);
   const period = r.period ? `<span class="rec-period">${esc(r.period)}</span>` : "";
+
+  const me = currentUserName() || "家人";
+  const likers = r.likers || [];
+  const liked = likers.includes(me);
+  const comments = r.comments || [];
+
+  const social = `
+    <div class="rec-social">
+      <button type="button" class="rec-like${liked ? " on" : ""}" data-like="${r.id}">${liked ? "❤️" : "🤍"} 讚 ${likers.length}</button>
+      <span class="rec-cc">💬 ${comments.length}</span>
+    </div>`;
+  const commentBlock = full ? `
+    <div class="rec-comments">
+      ${comments.map((c) => `<div class="rc"><b class="rc__a">${esc(c.author) || "家人"}</b>：<span>${esc(c.text)}</span>
+        <button type="button" class="rc__x" data-del-rc="${c.id}" data-rc-rehab="${r.id}" aria-label="刪除">✕</button></div>`).join("")}
+    </div>
+    <div class="rec-addc">
+      <input class="rc-input" type="text" data-rc-input="${r.id}" placeholder="留言給爸爸…" maxlength="1000">
+      <button type="button" class="rc-send" data-rc-send="${r.id}">送出</button>
+    </div>` : "";
+
   return `
-    <div class="rec" data-edit-rehab="${r.id}">
+    <div class="rec rec--rehab" data-rehab-id="${r.id}">
       <div class="rec__icon">🦵</div>
       <div class="rec__body">
-        <div class="rec__time">${period}${esc(r.time || "")} <span class="rec-count">完成 ${keys.length} 項</span></div>
+        <div class="rec__time">${period}${esc(r.time || "")} <span class="rec-count">完成 ${keys.length} 項</span>
+          <button type="button" class="rec__edit" data-edit-rehab="${r.id}" aria-label="編輯">✏️ 編輯</button></div>
         <div class="rec__metrics">${chips.join("")}</div>
         ${r.notes ? `<div class="rec__notes">${esc(r.notes)}</div>` : ""}
         ${media.length ? `<div class="rec__media">${media.join("")}</div>` : ""}
+        ${social}${commentBlock}
       </div>
     </div>`;
+}
+
+function refreshRehabCard(id) {
+  const row = state.rehabById[id];
+  if (!row) return;
+  document.querySelectorAll(`[data-rehab-id="${id}"]`).forEach((el) => {
+    const full = !!el.closest("#rehabList");
+    el.outerHTML = rehabCard(row, full);
+  });
+}
+
+async function toggleRehabLike(id) {
+  const row = state.rehabById[id]; if (!row) return;
+  const me = currentUserName() || "家人";
+  const liked = (row.likers || []).includes(me);
+  try {
+    const res = await API.rehabLike(id, { liker: me, like: !liked });
+    row.likers = res.likers || [];
+    refreshRehabCard(id);
+  } catch (e) { toast(e.message); }
+}
+
+async function sendRehabComment(id) {
+  const inp = document.querySelector(`[data-rc-input="${id}"]`);
+  const text = inp ? inp.value.trim() : "";
+  if (!text) { toast("請先寫留言"); return; }
+  try {
+    const c = await API.rehabComment(id, { author: currentUserName(), text });
+    const row = state.rehabById[id]; if (row) row.comments = (row.comments || []).concat([c]);
+    refreshRehabCard(id);
+  } catch (e) { toast(e.message); }
+}
+
+async function delRehabComment(cid, rid) {
+  if (!confirm("刪除這則留言？")) return;
+  try {
+    await API.deleteRehabComment(cid);
+    const row = state.rehabById[rid]; if (row) row.comments = (row.comments || []).filter((c) => c.id !== cid);
+    refreshRehabCard(rid);
+  } catch (e) { toast(e.message); }
 }
 
 function bpClass(sys, dia) {
@@ -416,7 +488,7 @@ async function renderRehabList() {
   el.innerHTML = groupByDate(rows).map(([date, items]) => `
     <div class="rec-group">
       <div class="rec-group__date">${fmtDateHuman(date)}</div>
-      ${items.map(rehabCard).join("")}
+      ${items.map((r) => rehabCard(r, true)).join("")}
     </div>`).join("");
 }
 
@@ -981,7 +1053,7 @@ function closeModal(id) {
 function openRehabModal(entry) {
   discardVoiceRecording();  // 清掉上一次可能還在進行的錄音
   state.editingRehab = entry ? entry.id : null;
-  state.modalPhoto = entry ? (entry.photo || null) : null;
+  state.modalPhotos = entry ? ((entry.photo_list && entry.photo_list.slice(0, 5)) || (entry.photo ? [entry.photo] : [])) : [];
   state.modalVoice = entry ? (entry.voice || null) : null;
   state.modalItems = entry && entry.items ? { ...entry.items } : {};
   state.modalPeriod = entry && entry.period ? entry.period : autoPeriod();
@@ -1005,7 +1077,7 @@ async function saveRehab() {
     time: $("#rTime").value,
     items: state.modalItems,
     notes: $("#rNotes").value.trim(),
-    photo: state.modalPhoto,
+    photos: state.modalPhotos,
     voice: state.modalVoice,
   };
   try {
@@ -1111,14 +1183,16 @@ function resizeImage(file, maxDim = 1000, quality = 0.7) {
 function renderMediaPreview() {
   const el = $("#rMediaPreview");
   let html = "";
-  if (state.modalPhoto) {
-    html += `<div class="thumb-wrap"><img src="${esc(state.modalPhoto)}" alt="照片預覽">
-             <button type="button" class="remove-media" data-remove="photo">✕</button></div>`;
-  }
+  (state.modalPhotos || []).forEach((p, i) => {
+    html += `<div class="thumb-wrap"><img src="${esc(p)}" alt="照片預覽">
+             <button type="button" class="remove-media" data-remove-photo="${i}" aria-label="移除照片">✕</button></div>`;
+  });
   if (state.modalVoice) {
     html += `<div class="rowline"><audio controls src="${esc(state.modalVoice)}"></audio>
-             <button type="button" class="remove-media" style="position:static" data-remove="voice">✕</button></div>`;
+             <button type="button" class="remove-media" style="position:static" data-remove="voice" aria-label="移除語音">✕</button></div>`;
   }
+  const n = (state.modalPhotos || []).length;
+  if (n) html += `<div class="tiny" style="text-align:left">已加入 ${n} / 5 張照片</div>`;
   el.innerHTML = html;
 }
 
@@ -1230,6 +1304,12 @@ function bindEvents() {
     if (info) { openExInfo(info.dataset.info); return; }
     const dm = e.target.closest("[data-del-msg]");
     if (dm) { deleteMessage(Number(dm.dataset.delMsg)); return; }
+    const lk = e.target.closest("[data-like]");
+    if (lk) { toggleRehabLike(Number(lk.dataset.like)); return; }
+    const rcs = e.target.closest("[data-rc-send]");
+    if (rcs) { sendRehabComment(Number(rcs.dataset.rcSend)); return; }
+    const rcd = e.target.closest("[data-del-rc]");
+    if (rcd) { delRehabComment(Number(rcd.dataset.delRc), Number(rcd.dataset.rcRehab)); return; }
     const rc = e.target.closest("[data-edit-rehab]");
     if (rc) {
       try {
@@ -1260,6 +1340,8 @@ function bindEvents() {
   $("#imgModal").addEventListener("click", closeImage);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !$("#imgModal").hidden) closeImage();
+    const ci = e.target && e.target.closest && e.target.closest("[data-rc-input]");
+    if (ci && e.key === "Enter") { e.preventDefault(); sendRehabComment(Number(ci.dataset.rcInput)); }
   });
 
   // 復健表單：時段選擇
@@ -1284,20 +1366,23 @@ function bindEvents() {
   $("#vitalsSave").addEventListener("click", saveVitals);
   $("#vitalsDelete").addEventListener("click", deleteVitals);
 
-  // 媒體
+  // 媒體：一次可選多張，最多 5 張
   $("#rPhoto").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try { state.modalPhoto = await resizeImage(file); renderMediaPreview(); }
-    catch { toast("照片讀取失敗"); }
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      if ((state.modalPhotos || []).length >= 5) { toast("最多 5 張照片"); break; }
+      try { state.modalPhotos.push(await resizeImage(file)); }
+      catch { toast("有照片讀取失敗"); }
+    }
+    renderMediaPreview();
+    e.target.value = "";  // 清掉，才能再次選同一張
   });
   $("#rVoiceBtn").addEventListener("click", toggleVoice);
   $("#rMediaPreview").addEventListener("click", (e) => {
+    const rp = e.target.closest("[data-remove-photo]");
+    if (rp) { state.modalPhotos.splice(Number(rp.dataset.removePhoto), 1); renderMediaPreview(); return; }
     const b = e.target.closest("[data-remove]");
-    if (!b) return;
-    if (b.dataset.remove === "photo") state.modalPhoto = null;
-    else state.modalVoice = null;
-    renderMediaPreview();
+    if (b && b.dataset.remove === "voice") { state.modalVoice = null; renderMediaPreview(); }
   });
 
   // 設定
