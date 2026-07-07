@@ -415,7 +415,8 @@ function rehabCard(r, full = false) {
     <div class="rec-social">
       <button type="button" class="rec-like${liked ? " on" : ""}" data-like="${r.id}">${liked ? "❤️" : "🤍"} 讚 ${likers.length}</button>
       <span class="rec-cc">💬 ${comments.length}</span>
-    </div>`;
+    </div>
+    ${likers.length ? `<div class="rec-likers">❤️ ${esc(likers.join("、"))}</div>` : ""}`;
   const commentBlock = full ? `
     <div class="rec-comments">
       ${comments.map((c) => `<div class="rc"><b class="rc__a">${esc(c.author) || "家人"}</b>：<span>${esc(c.text)}</span>

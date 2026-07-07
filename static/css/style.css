@@ -157,6 +157,7 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 .rec-like{border:none;background:transparent;cursor:pointer;font-size:.95rem;color:var(--muted);padding:2px 4px;font-weight:600}
 .rec-like.on{color:var(--danger)}
 .rec-cc{color:var(--muted);font-size:.9rem}
+.rec-likers{margin-top:4px;font-size:.82rem;color:#b5495f;word-break:break-word}
 .rec-comments{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .rc{font-size:1rem;line-height:1.5;background:var(--green-050);border-radius:10px;padding:7px 10px;
   display:flex;align-items:baseline;gap:2px;word-break:break-word}
