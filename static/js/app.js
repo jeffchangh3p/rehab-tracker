@@ -944,6 +944,21 @@ function updateHeaderName() {
 }
 
 /* ----------------------------- 復健表單 ----------------------------- */
+/* ----------------------------- 照片放大（點縮圖看大圖） ----------------------------- */
+function openImage(src) {
+  if (!src) return;
+  $("#imgModalImg").src = src;
+  $("#imgModal").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+function closeImage() {
+  $("#imgModal").hidden = true;
+  $("#imgModalImg").removeAttribute("src");
+  // 底下若還有表單彈窗開著，維持鎖定捲動
+  const stillOpen = !$("#rehabModal").hidden || !$("#vitalsModal").hidden || !$("#exInfoModal").hidden;
+  if (!stillOpen) document.body.style.overflow = "";
+}
+
 function openModal(id) { $("#" + id).hidden = false; document.body.style.overflow = "hidden"; }
 function closeModal(id) {
   $("#" + id).hidden = true;
@@ -1196,6 +1211,9 @@ function bindEvents() {
 
   // 點擊「動作說明」(ⓘ) → 開示範彈窗（清單與設定頁共用）
   document.addEventListener("click", async (e) => {
+    // 點縮圖看大圖（要放在編輯卡片判斷之前，避免同時開啟編輯視窗）
+    const zimg = e.target.closest(".rec__media img, .media-preview img");
+    if (zimg) { e.stopPropagation(); openImage(zimg.currentSrc || zimg.src); return; }
     const info = e.target.closest("[data-info]");
     if (info) { openExInfo(info.dataset.info); return; }
     const dm = e.target.closest("[data-del-msg]");
@@ -1225,6 +1243,12 @@ function bindEvents() {
   }));
   $$("[data-close-ex]").forEach((b) => b.addEventListener("click", closeExInfo));
   $("#exSpeakBtn").addEventListener("click", toggleSpeak);
+
+  // 照片放大：點任何地方（含大圖）或按 Esc 關閉
+  $("#imgModal").addEventListener("click", closeImage);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("#imgModal").hidden) closeImage();
+  });
 
   // 復健表單：時段選擇
   $("#rPeriod").addEventListener("click", (e) => {
