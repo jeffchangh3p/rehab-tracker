@@ -574,18 +574,25 @@ function shortLabel(s) { const d = parseDate(s); return `${d.getMonth() + 1}/${d
  *   type: 'bar' | 'line'
  *   labels: [dateStr]
  *   series: [{ name, color, values:[num|null] }]
+ *   refLines: [{ value, color, label }]  折線圖的水平警戒線（虛線）
  */
-function buildChart({ type, labels, series }) {
+function buildChart({ type, labels, series, refLines }) {
   const W = 340, H = 190;
   const mL = 30, mR = 10, mT = 12, mB = 26;
   const plotW = W - mL - mR, plotH = H - mT - mB;
   const n = labels.length;
+  const refs = refLines || [];
 
   let maxV = 0, minV = Infinity;
   for (const s of series) for (const v of s.values) {
     if (v == null) continue;
     if (v > maxV) maxV = v;
     if (v < minV) minV = v;
+  }
+  // 警戒線也要納入 y 範圍，否則畫出去看不到
+  for (const rl of refs) {
+    if (rl.value > maxV) maxV = rl.value;
+    if (rl.value < minV) minV = rl.value;
   }
   // 長條圖從 0 起算；折線（血壓 / 血糖）用資料的 [min,max] 加緩衝，才看得出變化。
   let yMin, yMax;
@@ -615,6 +622,13 @@ function buildChart({ type, labels, series }) {
     const y = yOf(val);
     svg += `<line x1="${x0}" y1="${y}" x2="${W - mR}" y2="${y}" stroke="#eef3f1" stroke-width="1"/>`;
     svg += `<text x="${x0 - 4}" y="${y + 3}" font-size="8" fill="#9aa8a3" text-anchor="end">${Math.round(val)}</text>`;
+  }
+
+  // 水平警戒線（虛線）+ 右側標籤
+  for (const rl of refs) {
+    const y = yOf(rl.value);
+    svg += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${W - mR}" y2="${y.toFixed(1)}" stroke="${rl.color}" stroke-width="1" stroke-dasharray="4 3" opacity="0.85"/>`;
+    svg += `<text x="${W - mR}" y="${(y - 3).toFixed(1)}" font-size="8" fill="${rl.color}" text-anchor="end">${esc(rl.label)}</text>`;
   }
 
   if (type === "bar") {
@@ -751,7 +765,12 @@ async function renderCharts() {
   const sugarSeries = SUGAR_CTX.filter((c) => has(sugarByCtx[c.key]))
     .map((c) => ({ name: c.key, color: c.color, values: sugarByCtx[c.key] }));
   if (sugarSeries.length) {
-    html += chartCard("血糖趨勢", "mg/dL · 依時機分線", buildChart({ type: "line", labels, series: sugarSeries }));
+    // 警戒線：空腹 126、飯後 200（只在該時機有資料時顯示，顏色對齊該線）
+    const refLines = [];
+    if (has(sugarByCtx["空腹"])) refLines.push({ value: 126, color: "#3b6d11", label: "空腹 126" });
+    if (has(sugarByCtx["飯後"])) refLines.push({ value: 200, color: "#d85a30", label: "飯後 200" });
+    html += chartCard("血糖趨勢", "mg/dL · 依時機分線 · 虛線為警戒值",
+      buildChart({ type: "line", labels, series: sugarSeries, refLines }));
   }
   wrap.innerHTML = html || `<div class="empty">這個時間範圍內沒有資料，換個範圍看看。</div>`;
 }
