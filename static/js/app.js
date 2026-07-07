@@ -14,7 +14,7 @@ const state = {
   chartRange: 7,
   editingRehab: null,   // 目前編輯中的復健紀錄 id
   editingVitals: null,
-  modalPhotos: [],      // 照片 data URI 陣列（最多 5 張）
+  modalPhotos: [],      // 照片 data URI 陣列（最多 3 張）
   modalVoice: null,     // data URI 或 null
   rehabById: {},        // 目前畫面上的復健紀錄，id -> row（按讚/留言後就地更新）
   modalItems: {},       // 復健表單勾選：{"1": 次數或 null}
@@ -1095,7 +1095,7 @@ function closeModal(id) {
 function openRehabModal(entry) {
   discardVoiceRecording();  // 清掉上一次可能還在進行的錄音
   state.editingRehab = entry ? entry.id : null;
-  state.modalPhotos = entry ? ((entry.photo_list && entry.photo_list.slice(0, 5)) || (entry.photo ? [entry.photo] : [])) : [];
+  state.modalPhotos = entry ? ((entry.photo_list && entry.photo_list.slice(0, 3)) || (entry.photo ? [entry.photo] : [])) : [];
   state.modalVoice = entry ? (entry.voice || null) : null;
   state.modalItems = entry && entry.items ? { ...entry.items } : {};
   state.modalPeriod = entry && entry.period ? entry.period : autoPeriod();
@@ -1234,7 +1234,7 @@ function renderMediaPreview() {
              <button type="button" class="remove-media" style="position:static" data-remove="voice" aria-label="移除語音">✕</button></div>`;
   }
   const n = (state.modalPhotos || []).length;
-  if (n) html += `<div class="tiny" style="text-align:left">已加入 ${n} / 5 張照片</div>`;
+  if (n) html += `<div class="tiny" style="text-align:left">已加入 ${n} / 3 張照片</div>`;
   el.innerHTML = html;
 }
 
@@ -1387,8 +1387,7 @@ function bindEvents() {
   $("#imgModal").addEventListener("click", closeImage);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !$("#imgModal").hidden) closeImage();
-    const ci = e.target && e.target.closest && e.target.closest("[data-rc-input]");
-    if (ci && e.key === "Enter") { e.preventDefault(); sendRehabComment(Number(ci.dataset.rcInput)); }
+    // 留言不再用 Enter 送出，避免打到一半誤送；只能點「送出」鈕
   });
 
   // 復健表單：時段選擇
@@ -1413,11 +1412,11 @@ function bindEvents() {
   $("#vitalsSave").addEventListener("click", saveVitals);
   $("#vitalsDelete").addEventListener("click", deleteVitals);
 
-  // 媒體：一次可選多張，最多 5 張
+  // 媒體：一次可選多張，最多 3 張
   $("#rPhoto").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files || []);
     for (const file of files) {
-      if ((state.modalPhotos || []).length >= 5) { toast("最多 5 張照片"); break; }
+      if ((state.modalPhotos || []).length >= 3) { toast("最多 3 張照片"); break; }
       try { state.modalPhotos.push(await resizeImage(file)); }
       catch { toast("有照片讀取失敗"); }
     }

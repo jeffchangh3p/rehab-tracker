@@ -409,7 +409,7 @@ def clean_items(raw):
     return out
 
 
-MAX_PHOTOS = 5
+MAX_PHOTOS = 3
 
 
 def clean_photos(raw):
